@@ -3,18 +3,18 @@
  * (reverse-scroll cards, card deck, detail morphs) reads from here, so nothing
  * downstream blocks on copy.
  *
- * ⚠️  Entries marked `draft: true` (Vibely, SpeakWell, Kodean) carry *inferred*
- *     copy — presentable, but written from the project names, not from Siddhesh's
- *     ground truth. The literal "DRAFT —" prefixes were removed so the flagship
- *     reads clean, but roles/years/highlights/links still need verifying before
- *     the app ships. The `draft` flag is how we keep track — it is NOT rendered.
- *     The candidate-intake app and this app are accurate.
+ * ⚠️  Vibely and SpeakWell are still flagged `draft: true` — their copy is real
+ *     but the owner is still refining it. The `draft` flag is internal tracking
+ *     only and is NOT rendered. Every entry now carries real links, each with an
+ *     `icon` key resolved to an image via `content/icons.ts`.
  */
+import type { IconKey } from './icons';
 
 export type ProjectLink = {
   label: string;
   url: string;
-  icon: string;
+  /** Semantic icon key; resolved to an image asset by `content/icons.ts`. */
+  icon: IconKey;
 };
 
 export type Project = {
@@ -90,7 +90,7 @@ export const projects: Project[] = [
     description:
       "A full-stack AI English speaking coach: you record yourself talking, and within 10-15 seconds get grammar corrections, filler-word detection, fluency/clarity/confidence scores, and both a corrected and a natural native-speaker rephrasing read back to you in audio. Built as an async, distributed pipeline — FastAPI queues the job and returns immediately, a Celery worker does the actual STT/analysis/TTS work off the request thread, and results are polled from the frontend.",
     highlights: [
-      "Deployed and live at speakwell-pi.vercel.app — Next.js frontend on Vercel, FastAPI/Celery/Redis backend on Railway",
+      "Deployed and live at speakwell-live.vercel.app — Next.js frontend on Vercel, FastAPI/Celery/Redis backend on Railway",
       "Routed transcription through Groq-hosted Whisper instead of running it locally, sidestepping Railway's memory limits",
       "Used Supabase Storage instead of local disk to solve distributed-filesystem issues across Celery worker containers",
       "RMS energy check via Librosa rejects silent recordings before any AI call runs, saving wasted inference",
