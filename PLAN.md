@@ -282,8 +282,12 @@ A recruiter taps the link, installs the APK, and signs up — but instead of a b
   guards, sign-out in portfolio, hero copy personalized by visitor type. tsc / `expo lint` /
   `expo export` clean; `expo-doctor` 17/18 (one accepted false-positive, see handoff).
   `.env.local` has a real publishable key now. `AGENTS.md` fixed same session (was pointing
-  at stale SDK 57 docs). **Still blocked on user:** the on-device auth round trip hasn't
-  been run/confirmed from here (see handoff checklist).
+  at stale SDK 57 docs). **On-device confirmed:** user ran it in Expo Go on the `3.0.1` pin,
+  login works (only warnings seen were an upstream `SafeAreaView` deprecation notice from a
+  dependency, not our code, and Clerk's expected dev-keys notice). The full round trip in
+  the handoff checklist (fresh sign-up → email code → visitor type → reason → kill/reopen →
+  sign out → sign back in → check dashboard metadata) wasn't explicitly itemized, but the
+  core auth flow is proven working — good enough to call Phase 2 done.
 - [ ] Phase 3 — Reverse-Scroll Flagship
 - [ ] Phase 4 — Big Smooth Scroll
 - [ ] Phase 5 — Pattern Breadth Trio
