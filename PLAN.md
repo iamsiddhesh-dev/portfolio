@@ -288,9 +288,10 @@ A recruiter taps the link, installs the APK, and signs up — but instead of a b
   the handoff checklist (fresh sign-up → email code → visitor type → reason → kill/reopen →
   sign out → sign back in → check dashboard metadata) wasn't explicitly itemized, but the
   core auth flow is proven working — good enough to call Phase 2 done.
-- [x] **Phase 3 — Reverse-Scroll Flagship** (2026-07-13): On branch
-  `feature/phase-3-reverse-scroll` (NOT yet merged — awaiting on-device sign-off, see
-  handoff). Portfolio act rebuilt as a single `Animated.ScrollView` owning one `scrollY`
+- [x] **Phase 3 — Reverse-Scroll Flagship** (2026-07-13): **Merged to `main`** (was
+  `feature/phase-3-reverse-scroll`), pushed. On-device confirmed by user: full sign-up round
+  trip works end to end and the reel animates correctly. Portfolio act rebuilt as a single
+  `Animated.ScrollView` owning one `scrollY`
   shared value (`useAnimatedScrollHandler`, UI thread). **Hero** personalized off Clerk
   `unsafeMetadata` — greeting + lead copy vary by `visitorType`, the typed `reason` is
   echoed back, AccentOrb motif reused, Moti stagger entrance, gentle scroll parallax.
@@ -303,8 +304,8 @@ A recruiter taps the link, installs the APK, and signs up — but instead of a b
   debt cleared enough to render: the three draft entries lost their literal "DRAFT —"
   prefixes and got presentable inferred copy (`draft: true` retained as internal tracking,
   never rendered) — **still needs Siddhesh's ground-truth verification**, see handoff. tsc /
-  `expo lint` / `expo export` (android) all clean. **Blocked on user:** on-device 60fps +
-  boundary-feel check + the 2–3 tuning loops the plan budgets (see handoff).
+  `expo lint` / `expo export` (android) all clean. NOTE: the pinning approach described below
+  was rearchitected the same day — see "On-device pass 1 corrections" for the shipped design.
 - [ ] Phase 4 — Big Smooth Scroll
 - [ ] Phase 5 — Pattern Breadth Trio
 - [ ] Phase 6 — Stripe Exit
