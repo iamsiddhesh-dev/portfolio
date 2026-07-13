@@ -50,7 +50,13 @@ export default function EntryScreen() {
       },
     });
     if (finalizeErr) {
-      setFinalizeError(finalizeErr.message ?? 'Could not complete sign-up.');
+      // finalize() only works when the sign-up is `complete`. If it isn't, name
+      // the actual blocker rather than echoing Clerk's opaque "no created session".
+      const detail =
+        `status: ${signUp.status}, ` +
+        `missing: [${signUp.missingFields.join(', ') || 'none'}], ` +
+        `unverified: [${signUp.unverifiedFields.join(', ') || 'none'}]`;
+      setFinalizeError(`${finalizeErr.message ?? 'Could not complete sign-up.'} (${detail})`);
       setFinalizing(false);
     }
   };

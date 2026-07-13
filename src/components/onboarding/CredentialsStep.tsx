@@ -73,11 +73,23 @@ export function CredentialsStep({
     setGlobalError(null);
     const { error } = await signUp.verifications.verifyEmailCode({ code });
     if (error) return;
-    if (signUp.status === 'complete' || signUp.unverifiedFields.length === 0) {
+    // Only advance when the sign-up is genuinely complete. `unverifiedFields`
+    // emptying is NOT enough — a `missingField` the Clerk instance requires (Name,
+    // username, legal consent…) keeps status at `missing_requirements`, and
+    // finalize() would then fail at the last step with no session created. Surface
+    // exactly what's blocking so the fix (usually a dashboard toggle) is obvious.
+    if (signUp.status === 'complete') {
       haptics.success();
       onSignUpVerified();
     } else {
-      setGlobalError('Verification incomplete — double-check the code.');
+      haptics.warning();
+      setGlobalError(
+        `Sign-up not complete (status: ${signUp.status}). ` +
+          `Missing fields: [${signUp.missingFields.join(', ') || 'none'}]. ` +
+          `Unverified: [${signUp.unverifiedFields.join(', ') || 'none'}]. ` +
+          `Any "missing" field is required by your Clerk instance but not collected here — ` +
+          `turn it off in the Clerk dashboard (User & Authentication).`,
+      );
     }
   };
 
