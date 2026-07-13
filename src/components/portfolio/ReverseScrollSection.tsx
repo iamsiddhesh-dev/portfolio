@@ -3,121 +3,112 @@
  *  THE FLAGSHIP — mayaresearch.ai-style reverse scroll
  * ────────────────────────────────────────────────────────────────────────────
  *
- *  A pinned section: it reserves PIN_MULTIPLIER × viewport of *scroll length*,
- *  but visually stays fixed on screen for that whole runway while its two card
- *  columns travel in OPPOSITE directions — left rides up with the scroll, right
- *  slides down against it. All of it runs on the UI thread: the parent hands us
- *  one `scrollY` shared value, we normalise it to a 0→1 `progress`, and every
- *  moving part reads that through `useAnimatedStyle` — zero per-frame React
- *  re-renders.
+ *  Robust pin, done the RN way: the ScrollView holds an EMPTY spacer that just
+ *  provides `PIN_MULTIPLIER × viewport` of scroll runway; this component is a
+ *  genuinely-fixed overlay rendered as a sibling *over* the ScrollView, so it
+ *  never moves — no counter-translation, no drift, no fighting the scroll. The
+ *  parent measures the spacer's top (`reelTop`) and hands us the one `scrollY`
+ *  shared value; we normalise `scrollY − reelTop` into a 0→1 `progress` and drive
+ *  everything off it on the UI thread:
  *
- *  Pinning is done by hand (no sticky positioning in RN ScrollView): the frame
- *  is absolutely placed at the section's top and translated *down* by exactly
- *  how far we've scrolled past that top — cancelling the scroll so it appears
- *  frozen — clamped to the runway so it releases cleanly at both ends.
+ *    · overlay opacity   — feathered in/out at the runway edges, so the hero and
+ *                          footer show through when the reel isn't active
+ *    · the two columns   — a fixed-height band through which cards STREAM in
+ *                          opposite directions (left up, right down)
+ *
+ *  Column travel is derived from FIXED constants (card height, band height), so
+ *  there's nothing to measure and the motion is always substantial and identical
+ *  across devices.
  */
-import { StyleSheet, View, type LayoutChangeEvent } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import Animated, {
   Extrapolation,
   interpolate,
   useAnimatedStyle,
   useDerivedValue,
-  useSharedValue,
   type SharedValue,
 } from 'react-native-reanimated';
+import { LinearGradient } from 'expo-linear-gradient';
 
 import { Text } from '@/components/Text';
 import { CARD_GAP, CARD_HEIGHT, ProjectCard } from '@/components/portfolio/ProjectCard';
 import { projects, type Project } from '@/content/projects';
 import { theme } from '@/theme/theme';
 
-/** How many viewport-heights of scroll the pinned section consumes. Tunable. */
+/** Viewport-heights of scroll the reel consumes before releasing. Tunable. */
 export const PIN_MULTIPLIER = 3;
+
+/** The fixed "window" the cards stream through. Shorter than a column of cards,
+ *  so there's always meaningful overflow (= travel) regardless of screen size. */
+const BAND_HEIGHT = Math.round(CARD_HEIGHT * 1.7);
 
 type ColumnItem =
   | { kind: 'intro' }
   | { kind: 'project'; project: Project; index: number };
 
-// Roster split across the two counter-moving columns. Both columns hold three
-// tiles so their content heights match and the counter-travel stays symmetric.
 const p = (index: number): ColumnItem => ({ kind: 'project', project: projects[index], index });
 const LEFT_ITEMS: ColumnItem[] = [{ kind: 'intro' }, p(0), p(2)];
 const RIGHT_ITEMS: ColumnItem[] = [p(1), p(3), p(4)];
 
-/** Deterministic column content height — 3 tiles + 2 gaps (intro tile counts). */
+// 3 tiles + 2 gaps per column (intro tile counts). Both columns match, so the
+// counter-travel is symmetric.
 const COLUMN_CONTENT_HEIGHT = 3 * CARD_HEIGHT + 2 * CARD_GAP;
+const TRAVEL = COLUMN_CONTENT_HEIGHT - BAND_HEIGHT;
 
-export function ReverseScrollSection({
+export function ReverseScrollReel({
   scrollY,
+  reelTop,
   viewportHeight,
 }: {
   scrollY: SharedValue<number>;
+  reelTop: SharedValue<number>;
   viewportHeight: number;
 }) {
-  const sectionTop = useSharedValue(0);
-  const columnViewport = useSharedValue(0);
+  const runway = viewportHeight * (PIN_MULTIPLIER - 1); // scroll distance = full 0→1 sweep
 
-  const sectionHeight = viewportHeight * PIN_MULTIPLIER;
-  const runway = sectionHeight - viewportHeight; // scroll distance spent pinned
-
-  const onSectionLayout = (e: LayoutChangeEvent) => {
-    sectionTop.value = e.nativeEvent.layout.y;
-  };
-  const onColumnsLayout = (e: LayoutChangeEvent) => {
-    columnViewport.value = e.nativeEvent.layout.height;
-  };
-
-  // 0 before the section reaches the top of the viewport, 1 once fully scrolled
-  // through the runway. Clamped so the ends are crisp, not mushy.
   const progress = useDerivedValue(() =>
-    interpolate(scrollY.value - sectionTop.value, [0, runway], [0, 1], Extrapolation.CLAMP),
+    interpolate(scrollY.value - reelTop.value, [0, runway], [0, 1], Extrapolation.CLAMP),
   );
 
-  // Hand-rolled pinning: translate the frame down by how far we've scrolled past
-  // the section top, capped at the runway so it latches on entry and releases on exit.
-  const frameStyle = useAnimatedStyle(() => ({
-    transform: [
-      {
-        translateY: interpolate(
-          scrollY.value - sectionTop.value,
-          [0, runway],
-          [0, runway],
-          Extrapolation.CLAMP,
-        ),
-      },
-    ],
+  // Invisible (so hero/footer show) until the reel is on screen; feather in/out
+  // at the very edges of the runway for a clean hand-off.
+  const overlayStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(progress.value, [0, 0.05, 0.95, 1], [0, 1, 1, 0], Extrapolation.CLAMP),
   }));
 
   // Left column rides UP with the scroll; right column slides DOWN against it.
-  const leftStyle = useAnimatedStyle(() => {
-    const travel = Math.max(0, COLUMN_CONTENT_HEIGHT - columnViewport.value);
-    return { transform: [{ translateY: interpolate(progress.value, [0, 1], [0, -travel]) }] };
-  });
-  const rightStyle = useAnimatedStyle(() => {
-    const travel = Math.max(0, COLUMN_CONTENT_HEIGHT - columnViewport.value);
-    return { transform: [{ translateY: interpolate(progress.value, [0, 1], [-travel, 0]) }] };
-  });
+  const leftStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: interpolate(progress.value, [0, 1], [0, -TRAVEL]) }],
+  }));
+  const rightStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: interpolate(progress.value, [0, 1], [-TRAVEL, 0]) }],
+  }));
 
   const progressBarStyle = useAnimatedStyle(() => ({
     transform: [{ scaleX: progress.value }],
   }));
 
   return (
-    <View style={{ height: sectionHeight }} onLayout={onSectionLayout}>
-      <Animated.View style={[styles.frame, { height: viewportHeight }, frameStyle]}>
-        <View style={styles.header}>
-          <Text variant="overline" color="accent">
-            The reel
-          </Text>
-          <Text variant="caption" color="textMuted">
-            Five builds, one throughline — keep scrolling
-          </Text>
-          <View style={styles.track}>
-            <Animated.View style={[styles.trackFill, progressBarStyle]} />
-          </View>
-        </View>
+    <Animated.View
+      pointerEvents="none"
+      style={[styles.overlay, { height: viewportHeight }, overlayStyle]}
+    >
+      <LinearGradient colors={theme.gradients.base} style={StyleSheet.absoluteFill} />
 
-        <View style={styles.columns} onLayout={onColumnsLayout}>
+      <View style={styles.header}>
+        <Text variant="overline" color="accent">
+          The reel
+        </Text>
+        <Text variant="caption" color="textMuted">
+          Five builds, one throughline — keep scrolling
+        </Text>
+        <View style={styles.track}>
+          <Animated.View style={[styles.trackFill, progressBarStyle]} />
+        </View>
+      </View>
+
+      <View style={styles.bandWrap}>
+        <View style={styles.band}>
           <View style={styles.column}>
             <Animated.View style={[styles.stack, leftStyle]}>
               {LEFT_ITEMS.map((item, i) => (
@@ -132,9 +123,24 @@ export function ReverseScrollSection({
               ))}
             </Animated.View>
           </View>
+          {/* Feather the band's top & bottom so cards fade at the edges. */}
+          <LinearGradient
+            colors={[theme.colors.bg, 'transparent']}
+            style={[styles.feather, styles.featherTop]}
+            pointerEvents="none"
+          />
+          <LinearGradient
+            colors={['transparent', theme.colors.bg]}
+            style={[styles.feather, styles.featherBottom]}
+            pointerEvents="none"
+          />
         </View>
-      </Animated.View>
-    </View>
+      </View>
+
+      <Text variant="overline" color="textMuted" style={styles.footNote}>
+        Opposite directions · let them pass
+      </Text>
+    </Animated.View>
   );
 }
 
@@ -158,24 +164,24 @@ function IntroCard() {
         Things I&apos;ve shipped
       </Text>
       <Text variant="caption" color="textSecondary">
-        Two columns, moving opposite ways. Let them pass.
+        A curated few, streaming past.
       </Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  frame: {
+  overlay: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
-    overflow: 'hidden',
     paddingHorizontal: theme.spacing.xl,
+    overflow: 'hidden',
   },
   header: {
     gap: theme.spacing.sm,
-    paddingTop: theme.spacing.xl,
+    paddingTop: theme.spacing.xxxl,
     paddingBottom: theme.spacing.lg,
   },
   track: {
@@ -189,20 +195,36 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     backgroundColor: theme.colors.accent,
     borderRadius: theme.radius.pill,
-    // scaleX grows the fill from the left edge, reading as a progress meter.
     transformOrigin: 'left center',
   },
-  columns: {
+  bandWrap: {
     flex: 1,
+    justifyContent: 'center',
+  },
+  band: {
+    height: BAND_HEIGHT,
     flexDirection: 'row',
     gap: theme.spacing.lg,
   },
   column: {
     flex: 1,
+    height: BAND_HEIGHT,
     overflow: 'hidden',
   },
   stack: {
     gap: CARD_GAP,
+  },
+  feather: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    height: theme.spacing.xxl,
+  },
+  featherTop: {
+    top: 0,
+  },
+  featherBottom: {
+    bottom: 0,
   },
   introCard: {
     height: CARD_HEIGHT,
@@ -216,5 +238,9 @@ const styles = StyleSheet.create({
   },
   introTitle: {
     marginBottom: theme.spacing.xs,
+  },
+  footNote: {
+    paddingBottom: theme.spacing.xxl,
+    textAlign: 'center',
   },
 });

@@ -15,43 +15,49 @@ export type Mode = 'signUp' | 'signIn';
 type SignUpHook = ReturnType<typeof useSignUp>;
 type SignInHook = ReturnType<typeof useSignIn>;
 
+/**
+ * Step 1 — email + password only. On sign-up this JUST creates the pending
+ * sign-up (`signUp.password()`); it deliberately does NOT send the email code or
+ * verify yet. Email verification is moved to the very LAST step, because in this
+ * Clerk (Future API) config verifying the email *completes* the sign-up, and a
+ * completed sign-up gets cleared from the client — so any metadata we still
+ * needed to attach (visitor type + reason) and the finalize() call would fail
+ * with "no created session". Collect everything first, verify + finalize last.
+ * Sign-in is unchanged: it can complete immediately.
+ */
 export function CredentialsStep({
   mode,
   onModeChange,
   signUpHook,
   signInHook,
-  onSignUpVerified,
+  onCredentialsDone,
 }: {
   mode: Mode;
   onModeChange: (mode: Mode) => void;
   signUpHook: SignUpHook;
   signInHook: SignInHook;
-  onSignUpVerified: () => void;
+  onCredentialsDone: (email: string) => void;
 }) {
   const { signUp, errors: signUpErrors, fetchStatus: signUpFetchStatus } = signUpHook;
   const { signIn, errors: signInErrors, fetchStatus: signInFetchStatus } = signInHook;
   const router = useRouter();
 
-  const [phase, setPhase] = useState<'form' | 'verify'>('form');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [code, setCode] = useState('');
   const [globalError, setGlobalError] = useState<string | null>(null);
 
-  const fetching = mode === 'signUp' ? signUpFetchStatus === 'fetching' : signInFetchStatus === 'fetching';
+  const fetching =
+    mode === 'signUp' ? signUpFetchStatus === 'fetching' : signInFetchStatus === 'fetching';
 
   const handleSubmitCredentials = async () => {
     setGlobalError(null);
     if (mode === 'signUp') {
+      // Creates the pending sign-up with email + password. No code send here —
+      // that happens after visitor type + reason are captured (see EntryScreen).
       const { error } = await signUp.password({ emailAddress: email, password });
       if (error) return;
-      const { error: codeError } = await signUp.verifications.sendEmailCode();
-      if (codeError) {
-        setGlobalError(codeError.message ?? 'Could not send a verification code.');
-        return;
-      }
       haptics.medium();
-      setPhase('verify');
+      onCredentialsDone(email.trim());
     } else {
       const { error } = await signIn.password({ emailAddress: email, password });
       if (error) return;
@@ -68,68 +74,6 @@ export function CredentialsStep({
       }
     }
   };
-
-  const handleVerifyCode = async () => {
-    setGlobalError(null);
-    const { error } = await signUp.verifications.verifyEmailCode({ code });
-    if (error) return;
-    // Only advance when the sign-up is genuinely complete. `unverifiedFields`
-    // emptying is NOT enough — a `missingField` the Clerk instance requires (Name,
-    // username, legal consent…) keeps status at `missing_requirements`, and
-    // finalize() would then fail at the last step with no session created. Surface
-    // exactly what's blocking so the fix (usually a dashboard toggle) is obvious.
-    if (signUp.status === 'complete') {
-      haptics.success();
-      onSignUpVerified();
-    } else {
-      haptics.warning();
-      setGlobalError(
-        `Sign-up not complete (status: ${signUp.status}). ` +
-          `Missing fields: [${signUp.missingFields.join(', ') || 'none'}]. ` +
-          `Unverified: [${signUp.unverifiedFields.join(', ') || 'none'}]. ` +
-          `Any "missing" field is required by your Clerk instance but not collected here — ` +
-          `turn it off in the Clerk dashboard (User & Authentication).`,
-      );
-    }
-  };
-
-  if (phase === 'verify') {
-    return (
-      <StepShell
-        stepKey="verify"
-        eyebrow="Step 1 of 3"
-        title="Check your email"
-        subtitle={`We sent a code to ${email}.`}
-      >
-        <View style={styles.body}>
-          <TextField
-            label="Verification code"
-            value={code}
-            onChangeText={setCode}
-            keyboardType="number-pad"
-            autoFocus
-            error={signUpErrors.fields.code?.message}
-          />
-          {globalError ? (
-            <Text variant="caption" color="danger">
-              {globalError}
-            </Text>
-          ) : null}
-          <Button
-            label="Verify"
-            trailing="→"
-            disabled={fetching || code.length === 0}
-            onPress={handleVerifyCode}
-          />
-          <Button
-            label="Send a new code"
-            variant="ghost"
-            onPress={() => signUp.verifications.sendEmailCode()}
-          />
-        </View>
-      </StepShell>
-    );
-  }
 
   return (
     <StepShell

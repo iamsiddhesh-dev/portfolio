@@ -499,3 +499,41 @@ that can quietly carry inferred copy — Phase 5 morphs these same cards into fu
 + card→detail morph (Phase 5), card deck (Phase 5), Stripe (Phase 6). Card taps currently do
 a haptic + press-scale only (no navigation) — the tap target is built, the destination isn't.
 `style-tile` remains reachable only while signed out (unchanged from Phase 2).
+
+### On-device pass 1 corrections (same day, 2026-07-13)
+
+First device run surfaced two real problems; both fixed on the same branch.
+
+**1. Auth was broken — sign-up reordered (this is a Phase 2 correction).** Symptom:
+"No sign up attempt was found" / "Cannot finalize sign-up without a created session" on the
+reason step, yet a reload dropped you into the portfolio *without* your visitor type / reason
+saved. Root cause (confirmed against the compiled SDK, `clerk.native.js`): in this Future-API
+config, **verifying the email code COMPLETES the sign-up**, and Clerk then clears the completed
+sign-up from the client. The Phase 2 flow deferred `signUp.finalize()` (and the
+`unsafeMetadata` `update()`) to a later step — by then `createdSessionId` is null and the
+sign-up attempt is gone, so both fail; the session still exists server-side, so a reload
+signs you in but with no metadata. **Fix = reorder so verification is LAST:** credentials
+(`signUp.password()` only, no code yet) → visitor type → reason (`signUp.update({unsafeMetadata})`
++ `sendEmailCode()`) → **verify** (`verifyEmailCode()` → `finalize()` immediately). Metadata
+is now attached while the sign-up is still pending, and finalize runs the instant it completes.
+New file `src/components/onboarding/VerifyStep.tsx`; `CredentialsStep` no longer verifies (sign-in
+path unchanged). **Note for testing:** the earlier broken attempts already created real users on
+those emails — use FRESH emails, or delete the old users in the Clerk dashboard, or `password()`
+will error "identifier already exists".
+
+**2. The reel didn't animate / "bounced" — rearchitected to a fixed overlay.** Two causes:
+(a) with 3 cards filling a full-viewport-tall column the content barely overflowed, so
+counter-travel was ~30px — invisible; (b) the original hand-rolled pin (absolute frame
+counter-translated *inside* the ScrollView) drifted/fought the scroll on Android. **New model:**
+the ScrollView holds only an empty `PIN_MULTIPLIER × viewport` spacer (the runway); the reel is
+a genuinely-fixed overlay rendered as a sibling *over* the ScrollView (never moves), its opacity
+feathered in/out at the runway edges so hero/footer show through when it's inactive. Cards stream
+through a FIXED-height band (`BAND_HEIGHT ≈ 1.7 × card`, so `TRAVEL = columnContent − band ≈ 316px`
+— substantial and device-independent, nothing to measure). Component renamed `ReverseScrollReel`;
+parent passes `scrollY` + a measured `reelTop` (the spacer's content offset). Overlay is
+`pointerEvents="none"`, so cards aren't tappable *while in the reel* — fine (they're moving, and
+the tap destination is Phase 5). Tuning knobs unchanged in spirit: `PIN_MULTIPLIER` (pin length)
+and now `BAND_HEIGHT` (how much streams / how big the travel).
+
+Everything re-verified: tsc / `expo lint` / `expo export` (android) clean. Still needs the
+on-device pass (auth round-trip + reel feel) before merge.
