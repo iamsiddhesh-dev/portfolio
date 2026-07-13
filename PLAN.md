@@ -274,14 +274,16 @@ A recruiter taps the link, installs the APK, and signs up — but instead of a b
   `content/projects.ts`, `CLAUDE.md`, `eas.json` done. Git repo initialized on `main`,
   remote set to `iamsiddhesh-dev/portfolio`. **Blocked on user:** on-device Expo Go check +
   EAS build login (see handoff).
-- [x] **Phase 2 — Clerk Auth + Onboarding** (2026-07-13): Built on
-  `feature/phase-2-clerk-auth`, not merged. Custom email+password flow via `useSignUp` /
-  `useSignIn` (`@clerk/expo`, **not** `@clerk/clerk-expo` — see handoff), 3-step onboarding
-  (credentials → visitor-type cards → reason) with Moti crossfades, `unsafeMetadata`
-  capture, `Stack.Protected` route guards, sign-out in portfolio, hero copy personalized by
-  visitor type. tsc / `expo lint` / `expo-doctor` (18/18) / `expo export` all clean.
-  **Blocked on user:** no Clerk app exists yet — can't get a publishable key or run the
-  on-device auth round trip from here (see handoff).
+- [x] **Phase 2 — Clerk Auth + Onboarding** (2026-07-13): Merged to `main` (was
+  `feature/phase-2-clerk-auth`), pushed to GitHub. Custom email+password flow via
+  `useSignUp` / `useSignIn` (`@clerk/expo`, **not** `@clerk/clerk-expo`, **pinned to exact
+  `3.0.1`** — see handoff, this matters), 3-step onboarding (credentials → visitor-type
+  cards → reason) with Moti crossfades, `unsafeMetadata` capture, `Stack.Protected` route
+  guards, sign-out in portfolio, hero copy personalized by visitor type. tsc / `expo lint` /
+  `expo export` clean; `expo-doctor` 17/18 (one accepted false-positive, see handoff).
+  `.env.local` has a real publishable key now. `AGENTS.md` fixed same session (was pointing
+  at stale SDK 57 docs). **Still blocked on user:** the on-device auth round trip hasn't
+  been run/confirmed from here (see handoff checklist).
 - [ ] Phase 3 — Reverse-Scroll Flagship
 - [ ] Phase 4 — Big Smooth Scroll
 - [ ] Phase 5 — Pattern Breadth Trio
@@ -317,17 +319,44 @@ them prominently — **still not fixed, carries forward into Phase 3.**
 
 ### Handoff notes (after Phase 2)
 
-**⚠️ AGENTS.md contradicts the SDK pin.** `AGENTS.md` currently says "Expo HAS CHANGED —
-read the v57 docs." That's stale/wrong: `CLAUDE.md` and this file both lock the app to
-**SDK 54** to match the published Expo Go app, and I ignored `AGENTS.md` this session and
-used v54 docs instead. Worth deleting or rewriting `AGENTS.md` so a future session doesn't
-follow it into a 57 upgrade that breaks on-device testing.
+**✅ AGENTS.md fixed.** It used to say "Expo HAS CHANGED — read the v57 docs," contradicting
+the SDK 54 pin in `CLAUDE.md`/this file. Rewrote it to state the pin correctly and point at
+v54 docs, so a future session won't follow it into a breaking 57 upgrade.
+
+**⚠️ `@clerk/expo` is pinned to exact `3.0.1`, not the latest `3.7.4` — do not `npm update`
+or re-`expo install` it without reading this.** Installing latest (`3.7.4`) crashes
+immediately in Expo Go: `Error: Cannot find native module 'ClerkExpo'`. Starting at
+`3.1.0`, `@clerk/expo`'s main entrypoint unconditionally calls
+`expo.requireNativeModule('ClerkExpo')` at module-eval time (in
+`dist/specs/NativeClerkModule.android.js`, pulled in by `ClerkProvider` itself) — a real
+native module that only exists in a custom dev client, never in the stock Expo Go app. This
+directly contradicts this plan's Architecture Decision #2 ("Auth = Clerk... runs in Expo Go
+(pure JS)").
+- I diffed tarballs across `3.0.0` → `3.6.x` (`npm pack @clerk/expo@<version>`, grep for
+  `dist/specs/`) and found `3.0.0`/`3.0.1` are the only Core 3 releases with **zero** native
+  specs — the mandatory native module was introduced at `3.1.0`. `3.0.1` still has the same
+  step-method API described below (Core 3 was the `3.0.0` rename itself), so nothing about
+  the auth code had to change — only the installed version.
+  `package.json` pins it as `"@clerk/expo": "3.0.1"` (no `^`) specifically so a routine
+  `npm install`/`expo install` doesn't silently pull `3.7.x` back in and reintroduce the
+  crash. If a later phase needs something only in a newer version (e.g. passkeys), that's a
+  deliberate call to make then — re-verify Expo Go compatibility first, or accept the
+  project needs to move to a dev client earlier than Phase 6.
+- This did cost one `expo-doctor` check: `3.0.1` still lists `expo-modules-core` as a
+  *required* peer dependency, but Expo's own guidance says never install
+  `expo-modules-core` directly (it should come transitively via the `expo` package — which
+  it already does, confirmed present at `node_modules/expo-modules-core`). Installing it
+  directly to silence the peer-dep warning immediately trips a *different*, more emphatic
+  doctor check ("should not be installed directly"). I left it uninstalled and accepted the
+  peer-dep warning as the lesser, false-positive one — **`expo-doctor` is 17/18, not 18/18,
+  and that's expected.**
 
 **Clerk shipped a new API generation ("Core 3") since this plan was written — the plan's
 own code sketches (`useSignUp`/`useSignIn`, `unsafeMetadata`) are directionally right but
 the method names in Phase 2's spec are from the old API.** What actually shipped:
-- Package is **`@clerk/expo`** (not `@clerk/clerk-expo` as CLAUDE.md's stack section says —
-  worth fixing there too). Installed version `3.7.4`.
+- Package is **`@clerk/expo`** (not `@clerk/clerk-expo` as CLAUDE.md's stack section used
+  to say — fixed there too this session). Installed version pinned to `3.0.1` — see the
+  Expo Go native-module note above for why.
 - No more `signUp.create()` / `prepareEmailAddressVerification()` / `setActive()`. The new
   "Future" API is step-method-shaped: `signUp.password({ emailAddress, password })` →
   `signUp.verifications.sendEmailCode()` → `signUp.verifications.verifyEmailCode({ code })`
@@ -381,8 +410,8 @@ building out if MFA or new-device trust get enabled later.
    sign back in with the same account and confirm it skips straight to portfolio. Then check
    the Clerk dashboard's **Users** tab that `unsafeMetadata` shows the visitor type + reason.
 
-**This is on `feature/phase-2-clerk-auth`, not merged to `main`** — merge once the above is
-verified on-device.
+**This is merged to `main` and pushed to GitHub already** (done at the user's explicit
+request, ahead of the on-device verification above — normally we'd verify first).
 
 **Deferred to later phases (by design):** film grain → Phase 5 (Skia); the Screen grade
 currently uses layered gradients (base + amber glow + vignette). App icon/splash art → Phase 7.
