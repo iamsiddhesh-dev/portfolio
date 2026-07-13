@@ -274,7 +274,14 @@ A recruiter taps the link, installs the APK, and signs up — but instead of a b
   `content/projects.ts`, `CLAUDE.md`, `eas.json` done. Git repo initialized on `main`,
   remote set to `iamsiddhesh-dev/portfolio`. **Blocked on user:** on-device Expo Go check +
   EAS build login (see handoff).
-- [ ] Phase 2 — Clerk Auth + Onboarding
+- [x] **Phase 2 — Clerk Auth + Onboarding** (2026-07-13): Built on
+  `feature/phase-2-clerk-auth`, not merged. Custom email+password flow via `useSignUp` /
+  `useSignIn` (`@clerk/expo`, **not** `@clerk/clerk-expo` — see handoff), 3-step onboarding
+  (credentials → visitor-type cards → reason) with Moti crossfades, `unsafeMetadata`
+  capture, `Stack.Protected` route guards, sign-out in portfolio, hero copy personalized by
+  visitor type. tsc / `expo lint` / `expo-doctor` (18/18) / `expo export` all clean.
+  **Blocked on user:** no Clerk app exists yet — can't get a publishable key or run the
+  on-device auth round trip from here (see handoff).
 - [ ] Phase 3 — Reverse-Scroll Flagship
 - [ ] Phase 4 — Big Smooth Scroll
 - [ ] Phase 5 — Pattern Breadth Trio
@@ -306,7 +313,76 @@ The worklets babel plugin is auto-configured by `babel-preset-expo` — there is
 **Content debt:** `src/content/projects.ts` — Vibely, SpeakWell, Kodean entries are
 DRAFT (marked `draft: true`), written from names + the plan. Candidate-intake app and
 this app are accurate. Real descriptions/roles/years/links needed before Phase 3 renders
-them prominently (not blocking to start Phase 2).
+them prominently — **still not fixed, carries forward into Phase 3.**
+
+### Handoff notes (after Phase 2)
+
+**⚠️ AGENTS.md contradicts the SDK pin.** `AGENTS.md` currently says "Expo HAS CHANGED —
+read the v57 docs." That's stale/wrong: `CLAUDE.md` and this file both lock the app to
+**SDK 54** to match the published Expo Go app, and I ignored `AGENTS.md` this session and
+used v54 docs instead. Worth deleting or rewriting `AGENTS.md` so a future session doesn't
+follow it into a 57 upgrade that breaks on-device testing.
+
+**Clerk shipped a new API generation ("Core 3") since this plan was written — the plan's
+own code sketches (`useSignUp`/`useSignIn`, `unsafeMetadata`) are directionally right but
+the method names in Phase 2's spec are from the old API.** What actually shipped:
+- Package is **`@clerk/expo`** (not `@clerk/clerk-expo` as CLAUDE.md's stack section says —
+  worth fixing there too). Installed version `3.7.4`.
+- No more `signUp.create()` / `prepareEmailAddressVerification()` / `setActive()`. The new
+  "Future" API is step-method-shaped: `signUp.password({ emailAddress, password })` →
+  `signUp.verifications.sendEmailCode()` → `signUp.verifications.verifyEmailCode({ code })`
+  → (optionally `signUp.update({ unsafeMetadata })` before completion) →
+  `signUp.finalize({ navigate })` to actually activate the session. Sign-in mirrors this:
+  `signIn.password(...)` → `signIn.finalize(...)`, with `signIn.mfa.*` for second-factor /
+  new-device client-trust flows (not built out this phase — out of scope, see below).
+- I verified all of this against the **installed package's own `.d.ts` files** under
+  `node_modules/@clerk/expo/node_modules/@clerk/{react,shared}/dist/types/` (mainly
+  `signUpFuture.d.ts`, `signInFuture.d.ts`, `state.d.ts`, `hooks.d.ts`) after Clerk's own
+  docs pages kept 404ing on fetch — that's ground truth, not guesswork.
+- `unsafeMetadata` is typed via global module augmentation now, added at
+  [`src/types/clerk.d.ts`](src/types/clerk.d.ts): `{ visitorType, reason }`.
+
+**Route protection uses Expo Router's `Stack.Protected`** (`src/app/_layout.tsx`), gated on
+`useAuth().isSignedIn`. This required adding a `_layout.tsx` to each of `(entry)`,
+`(portfolio)`, `(exit)` — a route group can only be addressed as one unit
+(`<Stack.Screen name="(entry)" />`) in the parent Stack if it has its own layout file.
+Signed-out → only `(entry)` reachable; signed-in → `(entry)` disappears entirely and
+`(portfolio)` + `(exit)` become reachable, landing on `/portfolio`.
+
+**`style-tile` is now unreachable while signed in** — it lives inside `(entry)`, which
+`Stack.Protected` removes once `isSignedIn`. Was a deliberate call (it's a Phase-1 dev
+reference screen, not part of the three-act narrative) but flag it in case that's wrong.
+
+**Onboarding flow** (`src/app/(entry)/index.tsx` + `src/components/onboarding/*`): single
+screen, internal step state (`credentials → visitorType → reason`), Moti crossfade between
+steps via `StepShell`. Sign-up path walks all three steps and only calls `signUp.finalize()`
+after `unsafeMetadata` is attached (step 3) — so the session isn't created until onboarding
+is actually complete. Sign-in path (existing users) finalizes immediately after password,
+skipping visitor-type/reason, matching "login with existing account works."
+
+**Out of scope, same as plan:** social OAuth, password reset, profile editing, and — new
+this phase — second-factor/client-trust verification (`signIn.mfa`) beyond a generic error
+message if `signIn.status` isn't `'complete'` after password. Fine for a solo dev's own
+Clerk instance with password + email-code sign-up (the enabled strategies below); would need
+building out if MFA or new-device trust get enabled later.
+
+**Three things need the user (couldn't be done from here — no Clerk account exists):**
+1. **Create a Clerk app** at [dashboard.clerk.com](https://dashboard.clerk.com). In
+   **User & Authentication → Email, Phone, Username**, enable **Email address** as an
+   identifier with **password** and **email verification code** as strategies (these are
+   what `CredentialsStep.tsx` drives). Social/passwordless can stay off — unused this phase.
+2. **Get the publishable key** from **API Keys** in the dashboard, copy `.env.example` to
+   `.env.local` (gitignored), and set `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_...` there.
+   The app throws a clear error at startup if this is missing.
+3. **On-device round trip** (`npm start`, Expo Go): sign up with a real email → enter the
+   code from the actual email → pick a visitor type → answer "why are you here?" → land in
+   portfolio with the personalized greeting → kill the app → reopen, still signed in → sign
+   out → confirm `/portfolio` and `/exit` are unreachable and you're back at onboarding →
+   sign back in with the same account and confirm it skips straight to portfolio. Then check
+   the Clerk dashboard's **Users** tab that `unsafeMetadata` shows the visitor type + reason.
+
+**This is on `feature/phase-2-clerk-auth`, not merged to `main`** — merge once the above is
+verified on-device.
 
 **Deferred to later phases (by design):** film grain → Phase 5 (Skia); the Screen grade
 currently uses layered gradients (base + amber glow + vignette). App icon/splash art → Phase 7.

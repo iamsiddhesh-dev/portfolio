@@ -32,7 +32,11 @@ export default function ExitScreen() {
         </View>
         <View style={styles.actions}>
           <Button label="Buy me a coffee" trailing="☕" disabled />
-          <Button label="Start over" variant="secondary" onPress={() => router.replace('/')} />
+          <Button
+            label="Back to portfolio"
+            variant="secondary"
+            onPress={() => router.replace('/portfolio')}
+          />
         </View>
       </View>
     </Screen>

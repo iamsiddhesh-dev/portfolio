@@ -1,3 +1,4 @@
+import { useAuth, useUser } from '@clerk/expo';
 import { useRouter } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
 
@@ -5,7 +6,15 @@ import { Button } from '@/components/Button';
 import { Screen } from '@/components/Screen';
 import { Text } from '@/components/Text';
 import { projects } from '@/content/projects';
+import { haptics } from '@/lib/haptics';
 import { theme } from '@/theme/theme';
+import type { VisitorType } from '@/types/clerk';
+
+const GREETING: Record<VisitorType, string> = {
+  recruiter: 'Welcome, recruiter 👋',
+  client: 'Good to see you 👋',
+  browsing: 'Hey, welcome in 👋',
+};
 
 /**
  * ACT II — Portfolio (placeholder shell). Phases 3–5 fill this with the
@@ -14,6 +23,16 @@ import { theme } from '@/theme/theme';
  */
 export default function PortfolioScreen() {
   const router = useRouter();
+  const { signOut } = useAuth();
+  const { user } = useUser();
+
+  const visitorType = user?.unsafeMetadata.visitorType;
+  const greeting = visitorType ? GREETING[visitorType] : 'Welcome 👋';
+
+  const handleSignOut = async () => {
+    haptics.medium();
+    await signOut();
+  };
 
   return (
     <Screen>
@@ -22,7 +41,7 @@ export default function PortfolioScreen() {
           Act II · Portfolio
         </Text>
         <Text variant="h1" style={styles.title}>
-          The work
+          {greeting}
         </Text>
         <Text variant="body" color="textSecondary">
           Placeholder shell — the animation-heavy showcase lands in Phases 3–5.
@@ -47,7 +66,7 @@ export default function PortfolioScreen() {
 
       <View style={styles.actions}>
         <Button label="To the exit" trailing="→" onPress={() => router.push('/exit')} />
-        <Button label="Back to entry" variant="ghost" onPress={() => router.replace('/')} />
+        <Button label="Sign out" variant="secondary" onPress={handleSignOut} />
       </View>
     </Screen>
   );

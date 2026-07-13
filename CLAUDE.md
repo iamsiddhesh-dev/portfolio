@@ -35,7 +35,8 @@ The whole app must read as premium — enforced per-phase, never deferred to "po
   `babel-preset-expo` — there is no `babel.config.js`, and none is needed).
 - **Moti** for declarative entrance/stagger animation (verified working on Reanimated 4).
 - `react-native-gesture-handler` (root is wrapped in `GestureHandlerRootView`).
-- Auth = **Clerk** (`@clerk/clerk-expo`, Phase 2). Payments = **Stripe** test mode (Phase 6,
+- Auth = **Clerk** (`@clerk/expo` — Clerk's Core 3 package rename from `@clerk/clerk-expo`,
+  see PLAN.md Phase 2 handoff). Payments = **Stripe** test mode (Phase 6,
   requires a dev build — pipeline pre-validated via EAS in Phase 1).
 - **Dark-locked.** No light mode. `userInterfaceStyle: "dark"`.
 

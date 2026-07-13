@@ -1,91 +1,86 @@
+import { useState } from 'react';
+import { useSignIn, useSignUp } from '@clerk/expo';
 import { useRouter } from 'expo-router';
-import { MotiView } from 'moti';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet } from 'react-native';
 
-import { AccentOrb } from '@/components/AccentOrb';
-import { Button } from '@/components/Button';
-import { Text } from '@/components/Text';
+import { CredentialsStep, type Mode } from '@/components/onboarding/CredentialsStep';
+import { ReasonStep } from '@/components/onboarding/ReasonStep';
+import { VisitorTypeStep } from '@/components/onboarding/VisitorTypeStep';
 import { Screen } from '@/components/Screen';
-import { theme } from '@/theme/theme';
+import { haptics } from '@/lib/haptics';
+import type { VisitorType } from '@/types/clerk';
+
+type Step = 'credentials' | 'visitorType' | 'reason';
 
 /**
- * ACT I — Entry (placeholder). In Phase 2 this becomes the Clerk-auth onboarding.
- * For now it's the on-brand front door + the hub to reach the style tile and acts.
- * Uses Moti for a staggered entrance — the first (deliberately low-stakes) Moti use,
- * doubling as a Reanimated-4 compatibility check.
+ * ACT I — Entry. Real Clerk auth doubling as a designed "who are you and why
+ * are you here?" moment: credentials → visitor type → reason, all captured in
+ * unsafeMetadata before the sign-up is finalized. Existing users skip straight
+ * to Step 1's sign-in path and land in the portfolio without the extra steps.
  */
 export default function EntryScreen() {
+  const signUpHook = useSignUp();
+  const signInHook = useSignIn();
   const router = useRouter();
 
-  // Staggered reveal: each child fades + rises, offset by index.
-  const rise = (delay: number) => ({
-    from: { opacity: 0, translateY: 18 },
-    animate: { opacity: 1, translateY: 0 },
-    transition: { type: 'timing' as const, duration: theme.duration.base, delay },
-  });
+  const [step, setStep] = useState<Step>('credentials');
+  const [mode, setMode] = useState<Mode>('signUp');
+  const [visitorType, setVisitorType] = useState<VisitorType | null>(null);
+  const [finalizing, setFinalizing] = useState(false);
+  const [finalizeError, setFinalizeError] = useState<string | null>(null);
+
+  const handleReasonSubmit = async (reason: string) => {
+    if (!visitorType) return;
+    setFinalizing(true);
+    setFinalizeError(null);
+
+    const { signUp } = signUpHook;
+    const { error: updateError } = await signUp.update({ unsafeMetadata: { visitorType, reason } });
+    if (updateError) {
+      setFinalizeError(updateError.message ?? 'Could not save your details.');
+      setFinalizing(false);
+      return;
+    }
+
+    const { error: finalizeErr } = await signUp.finalize({
+      navigate: ({ session }) => {
+        if (session?.currentTask) return;
+        haptics.success();
+        router.replace('/portfolio');
+      },
+    });
+    if (finalizeErr) {
+      setFinalizeError(finalizeErr.message ?? 'Could not complete sign-up.');
+      setFinalizing(false);
+    }
+  };
 
   return (
-    <Screen>
-      <View style={styles.container}>
-        <MotiView {...rise(120)} style={styles.orb}>
-          <AccentOrb size={150} />
-        </MotiView>
-
-        <View style={styles.copy}>
-          <MotiView {...rise(220)}>
-            <Text variant="overline" color="accent">
-              Act I · Entry
-            </Text>
-          </MotiView>
-          <MotiView {...rise(320)}>
-            <Text variant="display" style={styles.title}>
-              Siddhesh
-            </Text>
-          </MotiView>
-          <MotiView {...rise(420)}>
-            <Text variant="bodyLg" color="textSecondary" style={styles.lede}>
-              Frontend & full-stack engineer. This is a portfolio built as a
-              native app — not a website. Come in.
-            </Text>
-          </MotiView>
-        </View>
-
-        <MotiView {...rise(560)} style={styles.actions}>
-          <Button
-            label="Enter the portfolio"
-            trailing="→"
-            onPress={() => router.push('/portfolio')}
-          />
-          <Button
-            label="View the style tile"
-            variant="secondary"
-            onPress={() => router.push('/style-tile')}
-          />
-        </MotiView>
-      </View>
+    <Screen contentStyle={styles.content}>
+      {step === 'credentials' ? (
+        <CredentialsStep
+          mode={mode}
+          onModeChange={setMode}
+          signUpHook={signUpHook}
+          signInHook={signInHook}
+          onSignUpVerified={() => setStep('visitorType')}
+        />
+      ) : step === 'visitorType' ? (
+        <VisitorTypeStep
+          onSelect={(value) => {
+            setVisitorType(value);
+            setStep('reason');
+          }}
+        />
+      ) : (
+        <ReasonStep submitting={finalizing} error={finalizeError} onSubmit={handleReasonSubmit} />
+      )}
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: 'center',
-    gap: theme.spacing.xxxl,
-  },
-  orb: {
-    alignItems: 'center',
-  },
-  copy: {
-    gap: theme.spacing.md,
-  },
-  title: {
-    marginTop: theme.spacing.xs,
-  },
-  lede: {
-    maxWidth: 320,
-  },
-  actions: {
-    gap: theme.spacing.md,
+  content: {
+    paddingBottom: 24,
   },
 });
