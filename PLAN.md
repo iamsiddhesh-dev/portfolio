@@ -320,7 +320,7 @@ A recruiter taps the link, installs the APK, and signs up — but instead of a b
   years, stacks) so nothing new is fabricated. Snap-to-scene deliberately omitted (would fight
   the act-wide native scroll). Footer teaser copy updated (no longer promises a future pass).
   tsc / `expo lint` / `expo export` (android) all clean.
-- [ ] Phase 5 — Pattern Breadth Trio
+- [ ] Phase 5 — Pattern Breadth Trio (built, **not on-device verified**, see handoff)
 - [ ] Phase 6 — Stripe Exit
 - [ ] Phase 7 — Polish & Ship
 
@@ -614,3 +614,110 @@ and now `BAND_HEIGHT` (how much streams / how big the travel).
 
 Everything re-verified: tsc / `expo lint` / `expo export` (android) clean. Still needs the
 on-device pass (auth round-trip + reel feel) before merge.
+
+### Handoff notes (after Phase 5)
+
+**Not merged.** Lives on `feature/phase-5-pattern-breadth`. Built and statically verified
+(tsc / `expo lint` / `expo export` android / `expo-doctor` all clean — 17/18, same accepted
+`expo-modules-core` false-positive as every prior phase) but **not yet run on-device** — the
+morph's frame math and the deck's gesture feel are exactly the kind of thing that can look
+right on paper and wrong on a real screen, so this is not a "quietly ship it" phase. See the
+checklist at the bottom.
+
+**(a) Shared-element morph — three independent layers, not one scaled view.** Lives in
+[`src/lib/morph.tsx`](src/lib/morph.tsx) (`MorphProvider` / `useMorph`), mounted once in
+[`(portfolio)/_layout.tsx`](src/app/(portfolio)/_layout.tsx) above the `Stack` so it draws over
+both the grid screen and the detail screen. The first version of this got the technique wrong —
+worth recording so it isn't repeated: **naively wrapping real text in the same `transform: scale`
+view as the background frame stretches the text**, because a card's aspect ratio (wide, short) is
+nothing like a full screen's (narrow, tall), so `scaleY` alone was ~0.25 at rest. The shipped
+design splits it into three layers, all driven by one `progress` (0→1, frame growth) and one
+`contentMix` (0→1, content crossfade) shared-value pair:
+  1. **`frame`** — an unstyled colour block, FLIP-technique transformed (scale + translate a
+     full-screen base view down to *look like* the measured card rect, then animate to identity).
+     No text lives inside it, so nothing stretches.
+  2. **mini-card content** — the small card's text, absolutely pinned at the *actual measured*
+     origin rect (`left/top/width/height` set directly from the tap-time measurement, never
+     scaled), fading out over the first 35% of `contentMix`.
+  3. **hero content** — literally the same [`ProjectHero`](src/components/portfolio/ProjectHero.tsx)
+     component the real detail route renders, fading in over the last 50% of `contentMix`.
+  Origin frame is measured via `measureInWindow` on tap (in
+  [`ProjectGrid`](src/components/portfolio/ProjectGrid.tsx), the reel's un-tappable streaming cards
+  aren't the entry point) and stored in a plain `useRef` — **not** a shared value. This works
+  because `useAnimatedStyle`'s worklet closures are recreated on every JS render, and `open()`
+  calls `setProject()` (triggering that re-render) *after* writing the ref, so each fresh worklet
+  captures the correct frame at creation time. It would silently break if the ref were ever read
+  inside a *long-lived* worklet that isn't recreated per-render (e.g. a `useDerivedValue` with no
+  reactive deps) — don't refactor it that way without switching to a real shared value.
+  The real detail route ([`project/[id].tsx`](<src/app/(portfolio)/project/[id].tsx>)) is pushed
+  the instant `open()` fires and sits underneath the whole time, already laid out; once
+  `progress` finishes (600ms, `emphasizedDecel`) the overlay fades fully invisible (`visible`
+  shared value, decoupled from `progress` on purpose) over 250ms, handing off to the real
+  (pixel-identical, because it's the same `ProjectHero`) screen with no jump. `close()` reverses
+  the same timeline (400ms, `emphasizedAccel`) and only calls `router.back()` after the frame
+  has actually shrunk back down. **`project/[id]`'s `Stack.Screen` has `animation: 'none'` and
+  `gestureEnabled: false`** — the morph is deliberately the *only* visual transition for that
+  route in both directions; the in-screen back pill is the only way out (Android's OS-level
+  predictive-back gesture is already off globally in `app.json`, but iOS's edge-swipe would have
+  bypassed the morph entirely if left on).
+  **`ProjectHero`** ([`src/components/portfolio/ProjectHero.tsx`](src/components/portfolio/ProjectHero.tsx))
+  reads `useSafeAreaInsets().top` itself (rather than sitting in a `SafeAreaView`) specifically so
+  it lays out identically whether it's inside the overlay (raw, no safe-area wrapper) or the real
+  screen (`Screen edges={['bottom']}`, top intentionally excluded to avoid double-padding).
+  Same reasoning is why the real detail screen zeroes `Screen`'s own horizontal padding
+  (`contentStyle={{paddingHorizontal: 0}}`) and lets `ProjectHero` + the body section apply their
+  own — same pattern `portfolio.tsx` already uses for the hero/footer vs. the reel overlay.
+
+**(b) Gesture-physics card deck.** [`src/components/portfolio/CardDeck.tsx`](src/components/portfolio/CardDeck.tsx),
+content in [`src/content/factCards.ts`](src/content/factCards.ts) (self-authored "fun facts," not
+fabricated testimonials — no real client quotes exist yet). Only the **top** card gets a
+`Gesture.Pan()` (`.enabled(isTop)`); `activeOffsetX([-12,12])` + `failOffsetY([-12,12])` is what
+lets it live inside the act's vertical `ScrollView` without a conflict — a mostly-vertical drag
+fails the pan gesture immediately and falls through to the scroll, a mostly-horizontal one claims
+it. Drag rotates the card (`interpolate` on `translateX`); release either springs back
+(`withSpring`, `theme.spring.snappy`) or, past a distance **or** velocity threshold, commits via
+`withDecay` (velocity-based fling, falls back to a synthetic velocity if the release itself was
+slow-but-past-threshold) and haptic (`haptics.medium()`). Commit just rotates an `order` array of
+ids (`[...prev.slice(1), prev[0]]`) — the dismissed card cycles to the back, so the deck loops
+forever and there's nothing to reset: once a card drops out of the visible top-3 window it
+unmounts (shared values re-init clean), and when it cycles back in later it's a fresh mount at
+the back of the stack. The one bit of polish worth knowing about: stack position
+(`stackIndex` → scale/translateY/opacity) is **not** read directly from the prop in the worklet —
+it's mirrored into a `restIndex` shared value via a `withSpring` in a `useEffect`, so promotion up
+the stack (after the card ahead of it is dismissed) glides to its new resting spot instead of
+snapping there.
+
+**Skia — consciously dropped, not attempted.** Both patterns above were the full session's depth
+budget; per the plan this is explicitly droppable ("fallback: layered `expo-linear-gradient`",
+already what `Screen` does). `@shopify/react-native-skia` is not installed. If a future session
+wants it, it's bundled in Expo Go (unlike `react-native-svg`, which is genuinely not installed —
+the icon pipeline uses `expo-image`'s built-in SVG support instead), so no native rebuild would be
+needed — just model-effort should bump to Fable/Opus per the routing table, since shader work is
+a different kind of hard than anything built this phase.
+
+**On-device checklist (Definition of Done — needs you, `npm start` → Expo Go):**
+1. Scroll to "Full roster" (past the momentum section). Tap any card — it should **expand
+   continuously into the detail screen**, no flash, no jump, no visible seam where the overlay
+   hands off to the real screen. Watch specifically for: text squashing during the grow (would
+   mean the layer-split above has a bug), and a visible "pop" right as the overlay disappears
+   (would mean `ProjectHero`'s padding/positioning has drifted from what the overlay renders).
+2. On the detail screen: scroll through description/highlights/stack/links (`ProjectLinks` pills
+   should still open the in-app browser, tint amber — same open item as the Phase-4 handoff, now
+   doubly relevant since it renders on this screen too). Tap the back pill (top-left) — the card
+   should **shrink back to exactly where it was** in the roster list. Confirm the OS back
+   gesture/button does *not* skip the shrink animation (should be disabled for this route).
+3. Scroll to "Swipe through." Drag a card left/right — it should rotate with the drag, and
+   releasing before the threshold should **spring back** to centre. Drag past the threshold (or
+   flick fast) and it should **fly off** in that direction with a haptic tick, and the next card
+   should already be waiting, having glided up from the #2 slot. Confirm a *vertical* drag over
+   the deck scrolls the page normally instead of doing nothing / fighting the gesture.
+4. **Perf monitor on** for both — 60fps during the morph's grow/shrink and during active dragging.
+5. If the morph feels off: the frame/content split above is the thing to re-tune (durations are
+   `theme.duration.slow`/`base`/`fast` in `morph.tsx`, not new constants). If the deck's fling
+   feels too weak/strong: `SWIPE_VELOCITY_THRESHOLD` / the `withDecay` `deceleration` in
+   `CardDeck.tsx`. Merge once both feel right.
+
+**Out of scope, as planned:** Skia (dropped, see above), Stripe (Phase 6). Content debt in
+`projects.ts` (Vibely/SpeakWell copy still inferred, `draft: true`) is unchanged by this phase —
+these same cards now render in more places (grid, detail screen) but the underlying copy wasn't
+touched.
