@@ -8,6 +8,7 @@ import { Button } from '@/components/Button';
 import { Screen } from '@/components/Screen';
 import { Text } from '@/components/Text';
 import { Hero } from '@/components/portfolio/Hero';
+import { MomentumScrollSection } from '@/components/portfolio/MomentumScrollSection';
 import { PIN_MULTIPLIER, ReverseScrollReel } from '@/components/portfolio/ReverseScrollSection';
 import { haptics } from '@/lib/haptics';
 import { theme } from '@/theme/theme';
@@ -76,15 +77,19 @@ export default function PortfolioScreen() {
           {/* Empty runway for the pinned reel. The fixed overlay draws the cards. */}
           <View style={{ height: viewportHeight * PIN_MULTIPLIER }} onLayout={onSpacerLayout} />
 
+          {/* Phase 4 — the long momentum scroll. A direct child of the scroll
+              content so it can measure its own top offset (like the reel spacer). */}
+          <MomentumScrollSection scrollY={scrollY} viewportHeight={viewportHeight} />
+
           <View style={[styles.padded, styles.footer]}>
             <Text variant="overline" color="textMuted">
-              Next
+              That’s the tour
             </Text>
             <Text variant="h2" style={styles.footerTitle}>
-              The long scroll
+              One more thing
             </Text>
             <Text variant="body" color="textSecondary" style={styles.footerBody}>
-              A momentum-smoothed journey lands here in the next pass. For now, the exit’s open.
+              If any of this landed, there’s a coffee with my name on it. The exit’s open.
             </Text>
             <View style={styles.actions}>
               <Button label="To the exit" trailing="→" onPress={() => router.push('/exit')} />
