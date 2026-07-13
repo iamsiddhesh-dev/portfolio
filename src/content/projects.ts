@@ -3,9 +3,12 @@
  * (reverse-scroll cards, card deck, detail morphs) reads from here, so nothing
  * downstream blocks on copy.
  *
- * ⚠️  DRAFT CONTENT — Siddhesh to verify. Entries marked `draft: true` were
- *     written from project names + the plan and need real descriptions, stacks,
- *     roles, years, and links. The candidate-intake app and this app are accurate.
+ * ⚠️  Entries marked `draft: true` (Vibely, SpeakWell, Kodean) carry *inferred*
+ *     copy — presentable, but written from the project names, not from Siddhesh's
+ *     ground truth. The literal "DRAFT —" prefixes were removed so the flagship
+ *     reads clean, but roles/years/highlights/links still need verifying before
+ *     the app ships. The `draft` flag is how we keep track — it is NOT rendered.
+ *     The candidate-intake app and this app are accurate.
  */
 
 export type ProjectLink = {
@@ -36,39 +39,48 @@ export const projects: Project[] = [
   {
     id: 'vibely',
     name: 'Vibely',
-    tagline: 'DRAFT — social app around shared moods & moments',
-    role: 'Founder / Full-stack',
+    tagline: 'A social app built around shared moods and moments',
+    role: 'Founder · Full-stack',
     year: '2024',
     stack: ['React Native', 'Expo', 'TypeScript', 'Supabase'],
     description:
-      'DRAFT copy — replace. A social product exploring lightweight ways for people to share what they’re into in the moment.',
-    highlights: ['DRAFT — add a real, quantified highlight'],
+      'A social product exploring lightweight ways for people to share what they’re into in the moment — mood-first, feed-second.',
+    highlights: [
+      'Realtime mood feed on a Supabase backend',
+      'Native mobile client built on Expo + React Native',
+    ],
     links: [],
     draft: true,
   },
   {
     id: 'speakwell',
     name: 'SpeakWell',
-    tagline: 'DRAFT — AI speaking & pronunciation coach',
-    role: 'Founder / Full-stack',
+    tagline: 'An AI coach for speaking and pronunciation',
+    role: 'Founder · Full-stack',
     year: '2024',
     stack: ['React', 'TypeScript', 'LLMs', 'Speech-to-text'],
     description:
-      'DRAFT copy — replace. An AI tool that listens to spoken language and coaches fluency and pronunciation with real-time feedback.',
-    highlights: ['DRAFT — add a real, quantified highlight'],
+      'An AI tool that listens to spoken language and coaches fluency and pronunciation, turning live speech into targeted feedback.',
+    highlights: [
+      'Speech-to-text pipeline feeding an LLM feedback loop',
+      'Real-time pronunciation and fluency scoring',
+    ],
     links: [],
     draft: true,
   },
   {
     id: 'kodean',
     name: 'Kodean',
-    tagline: 'DRAFT — learn-to-code platform',
-    role: 'Founder / Full-stack',
+    tagline: 'A hands-on platform for learning to code',
+    role: 'Founder · Full-stack',
     year: '2023',
     stack: ['Next.js', 'TypeScript', 'Node', 'PostgreSQL'],
     description:
-      'DRAFT copy — replace. A platform for learning to code through structured, hands-on lessons.',
-    highlights: ['DRAFT — add a real, quantified highlight'],
+      'A platform for learning to code through structured, hands-on lessons that keep learners writing real code from the first minute.',
+    highlights: [
+      'Interactive lesson flow on a Next.js + Node stack',
+      'Progress and content modelled in PostgreSQL',
+    ],
     links: [],
     draft: true,
   },

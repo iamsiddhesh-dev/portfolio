@@ -1,33 +1,45 @@
+import { useState } from 'react';
 import { useAuth, useUser } from '@clerk/expo';
 import { useRouter } from 'expo-router';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, View, useWindowDimensions, type LayoutChangeEvent } from 'react-native';
+import Animated, { useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated';
 
 import { Button } from '@/components/Button';
 import { Screen } from '@/components/Screen';
 import { Text } from '@/components/Text';
-import { projects } from '@/content/projects';
+import { Hero } from '@/components/portfolio/Hero';
+import { ReverseScrollSection } from '@/components/portfolio/ReverseScrollSection';
 import { haptics } from '@/lib/haptics';
 import { theme } from '@/theme/theme';
-import type { VisitorType } from '@/types/clerk';
-
-const GREETING: Record<VisitorType, string> = {
-  recruiter: 'Welcome, recruiter 👋',
-  client: 'Good to see you 👋',
-  browsing: 'Hey, welcome in 👋',
-};
 
 /**
- * ACT II — Portfolio (placeholder shell). Phases 3–5 fill this with the
- * reverse-scroll flagship, momentum scroll, morphs and the card deck. For now it
- * proves navigation + renders the real project roster from content/projects.ts.
+ * ACT II — Portfolio. One `Animated.ScrollView` owns a single `scrollY` shared
+ * value (captured on the UI thread via `useAnimatedScrollHandler`); the hero and
+ * the reverse-scroll reel both read it, so the whole act is choreographed off one
+ * source of scroll with zero per-frame React re-renders. Phase 4 slots its
+ * momentum-scroll section between the reel and the footer.
  */
 export default function PortfolioScreen() {
   const router = useRouter();
   const { signOut } = useAuth();
   const { user } = useUser();
+  const { height: windowHeight } = useWindowDimensions();
 
   const visitorType = user?.unsafeMetadata.visitorType;
-  const greeting = visitorType ? GREETING[visitorType] : 'Welcome 👋';
+  const reason = user?.unsafeMetadata.reason;
+
+  const scrollY = useSharedValue(0);
+  const onScroll = useAnimatedScrollHandler((e) => {
+    scrollY.value = e.contentOffset.y;
+  });
+
+  // The visible scroll viewport (< window height once safe areas are inset). The
+  // reverse-scroll section sizes its pinned runway off this, so measure it for
+  // real rather than trusting the window height.
+  const [viewportHeight, setViewportHeight] = useState(windowHeight);
+  const onScrollLayout = (e: LayoutChangeEvent) => {
+    setViewportHeight(e.nativeEvent.layout.height);
+  };
 
   const handleSignOut = async () => {
     haptics.medium();
@@ -35,73 +47,71 @@ export default function PortfolioScreen() {
   };
 
   return (
-    <Screen>
-      <View style={styles.header}>
-        <Text variant="overline" color="accent">
-          Act II · Portfolio
-        </Text>
-        <Text variant="h1" style={styles.title}>
-          {greeting}
-        </Text>
-        <Text variant="body" color="textSecondary">
-          Placeholder shell — the animation-heavy showcase lands in Phases 3–5.
-        </Text>
-      </View>
+    <Screen contentStyle={styles.screen}>
+      <Animated.ScrollView
+        onScroll={onScroll}
+        onLayout={onScrollLayout}
+        scrollEventThrottle={16}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.content}
+      >
+        <View style={styles.padded}>
+          <Hero
+            scrollY={scrollY}
+            viewportHeight={viewportHeight}
+            visitorType={visitorType}
+            reason={reason}
+          />
+        </View>
 
-      <View style={styles.list}>
-        {projects.map((p, i) => (
-          <View key={p.id} style={styles.row}>
-            <Text variant="caption" color="textMuted" style={styles.index}>
-              {String(i + 1).padStart(2, '0')}
-            </Text>
-            <View style={styles.rowText}>
-              <Text variant="h3">{p.name}</Text>
-              <Text variant="caption" color="textSecondary" numberOfLines={1}>
-                {p.tagline}
-              </Text>
-            </View>
+        {/* Direct child of the scroll content on purpose: the section measures
+            its own top via onLayout, and onLayout.y is relative to the parent —
+            so it must sit directly under the content container to read a true
+            content offset. It pads its own frame instead of leaning on a wrapper. */}
+        <ReverseScrollSection scrollY={scrollY} viewportHeight={viewportHeight} />
+
+        <View style={[styles.padded, styles.footer]}>
+          <Text variant="overline" color="textMuted">
+            Next
+          </Text>
+          <Text variant="h2" style={styles.footerTitle}>
+            The long scroll
+          </Text>
+          <Text variant="body" color="textSecondary" style={styles.footerBody}>
+            A momentum-smoothed journey lands here in the next pass. For now, the exit’s open.
+          </Text>
+          <View style={styles.actions}>
+            <Button label="To the exit" trailing="→" onPress={() => router.push('/exit')} />
+            <Button label="Sign out" variant="secondary" onPress={handleSignOut} />
           </View>
-        ))}
-      </View>
-
-      <View style={styles.actions}>
-        <Button label="To the exit" trailing="→" onPress={() => router.push('/exit')} />
-        <Button label="Sign out" variant="secondary" onPress={handleSignOut} />
-      </View>
+        </View>
+      </Animated.ScrollView>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  header: {
-    gap: theme.spacing.sm,
-    paddingTop: theme.spacing.xl,
+  screen: {
+    paddingHorizontal: 0,
   },
-  title: {
+  content: {
+    paddingBottom: theme.spacing.huge,
+  },
+  padded: {
+    paddingHorizontal: theme.spacing.xl,
+  },
+  footer: {
+    paddingTop: theme.spacing.xxxl,
+    gap: theme.spacing.sm,
+  },
+  footerTitle: {
     marginTop: theme.spacing.xs,
   },
-  list: {
-    flex: 1,
-    justifyContent: 'center',
-    gap: theme.spacing.lg,
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.lg,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.hairline,
-    paddingBottom: theme.spacing.lg,
-  },
-  index: {
-    width: 24,
-  },
-  rowText: {
-    flex: 1,
-    gap: 2,
+  footerBody: {
+    marginTop: theme.spacing.xs,
+    marginBottom: theme.spacing.lg,
   },
   actions: {
     gap: theme.spacing.md,
-    paddingBottom: theme.spacing.lg,
   },
 });

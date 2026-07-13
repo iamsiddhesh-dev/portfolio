@@ -288,7 +288,23 @@ A recruiter taps the link, installs the APK, and signs up — but instead of a b
   the handoff checklist (fresh sign-up → email code → visitor type → reason → kill/reopen →
   sign out → sign back in → check dashboard metadata) wasn't explicitly itemized, but the
   core auth flow is proven working — good enough to call Phase 2 done.
-- [ ] Phase 3 — Reverse-Scroll Flagship
+- [x] **Phase 3 — Reverse-Scroll Flagship** (2026-07-13): On branch
+  `feature/phase-3-reverse-scroll` (NOT yet merged — awaiting on-device sign-off, see
+  handoff). Portfolio act rebuilt as a single `Animated.ScrollView` owning one `scrollY`
+  shared value (`useAnimatedScrollHandler`, UI thread). **Hero** personalized off Clerk
+  `unsafeMetadata` — greeting + lead copy vary by `visitorType`, the typed `reason` is
+  echoed back, AccentOrb motif reused, Moti stagger entrance, gentle scroll parallax.
+  **Reverse-scroll flagship** (`ReverseScrollSection`): hand-rolled pinning (no RN sticky) —
+  frame absolutely placed at the section top, translated down by `clamp(scrollY − sectionTop,
+  0, runway)` to appear frozen for a `PIN_MULTIPLIER × viewport` runway, then released; a
+  0→1 `progress` derived value drives two clipped columns translating in OPPOSITE directions
+  (left up with scroll, right down against it) + an accent progress meter. **ProjectCard**
+  (fixed height so column travel math is deterministic) with spring-press + haptic. Content
+  debt cleared enough to render: the three draft entries lost their literal "DRAFT —"
+  prefixes and got presentable inferred copy (`draft: true` retained as internal tracking,
+  never rendered) — **still needs Siddhesh's ground-truth verification**, see handoff. tsc /
+  `expo lint` / `expo export` (android) all clean. **Blocked on user:** on-device 60fps +
+  boundary-feel check + the 2–3 tuning loops the plan budgets (see handoff).
 - [ ] Phase 4 — Big Smooth Scroll
 - [ ] Phase 5 — Pattern Breadth Trio
 - [ ] Phase 6 — Stripe Exit
@@ -419,3 +435,67 @@ request, ahead of the on-device verification above — normally we'd verify firs
 
 **Deferred to later phases (by design):** film grain → Phase 5 (Skia); the Screen grade
 currently uses layered gradients (base + amber glow + vignette). App icon/splash art → Phase 7.
+
+### Handoff notes (after Phase 3)
+
+**Not merged.** Phase 3 lives on `feature/phase-3-reverse-scroll`. Per the standing rule
+(and because the reverse-scroll *feel* genuinely can't be judged off-device), this one waits
+for the on-device pass before merging — unlike Phase 2, which was merged ahead of
+verification at explicit request. Merge when the checklist below feels right.
+
+**Architecture of the flagship (so a future session can tune, not reverse-engineer):**
+- The whole portfolio act is ONE `Animated.ScrollView` with a single `scrollY` shared value
+  (`src/app/(portfolio)/portfolio.tsx`). Hero and reel both read it. Phase 4's momentum
+  section slots between the reel and the footer and can reuse this exact `scrollY` pattern.
+- **Pinning is hand-rolled** because RN's ScrollView has no sticky positioning. The section
+  reserves `PIN_MULTIPLIER × viewportHeight` of scroll length (a tall spacer `View`); inside
+  it, an absolutely-positioned frame is translated *down* by `clamp(scrollY − sectionTop, 0,
+  runway)` — exactly cancelling the scroll so it looks frozen — then releases at the runway
+  end. `runway = (PIN_MULTIPLIER − 1) × viewportHeight`.
+- **`sectionTop` is measured via `onLayout`, and `onLayout.y` is parent-relative** — so the
+  section MUST be a direct child of the ScrollView content container (it is; it pads its own
+  frame instead of sitting in a padded wrapper). If a future edit wraps it in a `<View>`,
+  `sectionTop` silently reads 0 and the pin breaks. This bit me mid-build; don't re-introduce it.
+- **Counter-motion:** one 0→1 `progress` derived value; left column `translateY 0 → −travel`
+  (rides up with scroll), right column `−travel → 0` (slides down against it). `travel =
+  columnContentHeight − columnViewportHeight`, both measured/known. Cards are FIXED height
+  (`CARD_HEIGHT`/`CARD_GAP` exported from `ProjectCard`) precisely so `columnContentHeight`
+  is knowable without measuring every card — don't make cards variable-height without
+  switching to per-card measurement.
+- **`viewportHeight` is measured** (ScrollView `onLayout`), not `useWindowDimensions` —
+  the visible scroll area is shorter than the window once safe areas inset, and the pin
+  runway must match the real viewport. Initialised to window height, corrected on first layout.
+
+**Tuning knobs (the plan budgets 2–3 on-device loops — these are the dials):**
+- `PIN_MULTIPLIER` (`ReverseScrollSection.tsx`, currently **3**) — how many screens of scroll
+  the pin consumes. Higher = slower, more cinematic reveal; lower = snappier. Try 2.5–3.5.
+- Column split / roster order (`LEFT_ITEMS` / `RIGHT_ITEMS`) — currently left = [intro,
+  Vibely, Kodean], right = [SpeakWell, Candidate-Intake, This App], 3 tiles each so the
+  content heights (and thus counter-travel) match. Change with care: unequal column heights
+  give asymmetric travel (can look deliberate, or broken).
+- `CARD_HEIGHT` (208) — taller cards = more travel/overflow, so more counter-motion per card.
+- Hero parallax constants + `minHeight` factor (0.92) in `Hero.tsx`.
+
+**⚠️ Content still needs your ground truth.** Vibely / SpeakWell / Kodean copy is *inferred*
+from names — presentable, but the roles, years, highlights, and links are guesses, and every
+`links: []` is empty (no card links anywhere yet). `draft: true` is retained purely as the
+tracking flag and is deliberately NOT rendered (no "draft" badge on screen). Replace with
+real copy + links in `src/content/projects.ts` before Phase 7 ships. This is the last phase
+that can quietly carry inferred copy — Phase 5 morphs these same cards into full detail screens.
+
+**On-device checklist (Definition of Done — needs you, `npm start` → Expo Go):**
+1. Sign in → land on the personalized hero; confirm the greeting/lead match your visitor type
+   and your typed reason is echoed. (Sign out + back in as a different visitor type to see the
+   copy change, if you want to verify all three variants.)
+2. Scroll into the reel: the section should **pin** (freeze on screen) while the two columns
+   glide past each other in opposite directions, then release cleanly to the footer.
+3. **Perf monitor on** — 60fps sustained through the whole reel, no JS-thread jank.
+4. **Boundary feel** at both ends (entry into pin, release out of pin) should read as
+   intentional, not abrupt or drifty. This is the most likely thing to need a `PIN_MULTIPLIER`
+   or interpolation tweak.
+5. If any of the above feels off, adjust the tuning knobs above and re-check. Merge once it's right.
+
+**Out of scope, as planned:** big momentum-scroll section (Phase 4), project *detail* screens
++ card→detail morph (Phase 5), card deck (Phase 5), Stripe (Phase 6). Card taps currently do
+a haptic + press-scale only (no navigation) — the tap target is built, the destination isn't.
+`style-tile` remains reachable only while signed out (unchanged from Phase 2).
