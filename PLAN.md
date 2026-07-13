@@ -306,7 +306,21 @@ A recruiter taps the link, installs the APK, and signs up — but instead of a b
   never rendered) — **still needs Siddhesh's ground-truth verification**, see handoff. tsc /
   `expo lint` / `expo export` (android) all clean. NOTE: the pinning approach described below
   was rearchitected the same day — see "On-device pass 1 corrections" for the shipped design.
-- [ ] Phase 4 — Big Smooth Scroll
+- [~] **Phase 4 — Big Smooth Scroll** (2026-07-13): Built on
+  `feature/phase-4-momentum-scroll` (not merged — waits for the on-device pass, same as
+  Phase 3). **Key technical decision made: smoothed spring-follow of native `scrollY`, NOT
+  custom `Gesture.Pan` + `withDecay`** — see handoff for the full rationale. Native scroll
+  keeps its (already excellent) momentum; a UI-thread lerp follower (`useSmoothFollow`)
+  reproduces Lenis's *lag*, and every scene rides that one `smooth` value. New momentum
+  section (`MomentumScrollSection`) slots between the reel spacer and the footer inside the
+  existing single `Animated.ScrollView`: a chapter header + **3 full-viewport scroll-tied
+  scenes** — skills reveal (staggered rows), stats (count-up numbers via `useAnimatedProps`
+  on a TextInput, zero React re-renders), and a career timeline (rail draws down, milestones
+  reveal). Content in new `src/content/journey.ts`, all *derived* from `projects.ts` (roster,
+  years, stacks) so nothing new is fabricated. Snap-to-scene deliberately omitted (would fight
+  the act-wide native scroll). Footer teaser copy updated (no longer promises a future pass).
+  tsc / `expo lint` / `expo export` (android) all clean. **Still needs the on-device pass** —
+  momentum/scene feel + 60fps — before merge.
 - [ ] Phase 5 — Pattern Breadth Trio
 - [ ] Phase 6 — Stripe Exit
 - [ ] Phase 7 — Polish & Ship
@@ -500,6 +514,69 @@ that can quietly carry inferred copy — Phase 5 morphs these same cards into fu
 + card→detail morph (Phase 5), card deck (Phase 5), Stripe (Phase 6). Card taps currently do
 a haptic + press-scale only (no navigation) — the tap target is built, the destination isn't.
 `style-tile` remains reachable only while signed out (unchanged from Phase 2).
+
+### Handoff notes (after Phase 4)
+
+**Not merged.** Lives on `feature/phase-4-momentum-scroll` (commit `06d0f9d`). Merge after the
+on-device checklist below feels right — the momentum *feel* genuinely can't be judged off-device.
+
+**The key decision — smoothed follow, not custom decay (spiked both, committed to one):**
+- **Chosen: smoothed spring-follow of native `scrollY`.** Native mobile scroll already owns
+  best-in-class momentum (fling, deceleration, boundary) for free. What web's GSAP+Lenis adds,
+  and what raw `scrollY` lacks, is the *lag* — a value that eases toward the offset instead of
+  snapping. `src/lib/useSmoothFollow.ts` reproduces exactly that: a UI-thread `useFrameCallback`
+  exponential smoother (frame-rate-independent via real `dt`, `tau ≈ 0.12s`), settling to quiet
+  at rest so idle frames don't recompute. All scenes ride this one `smooth` value.
+- **Rejected: `Gesture.Pan` + `withDecay` canvas.** It would mean *replacing* native scroll for
+  this region, which (a) fights the whole act's single-`ScrollView` + measured-reel architecture
+  and (b) nests a pan gesture inside the native ScrollView → gesture conflict. High risk, and on
+  mobile the marginal gain over native fling is small. If a future phase wants true custom physics
+  (e.g. a standalone gesture deck), that's Phase 5 territory, isolated from this scroll.
+
+**Architecture (so a future session can tune, not reverse-engineer):**
+- `MomentumScrollSection` is a **direct child of the scroll content container** (sibling of the
+  reel spacer + footer), so its `onLayout.y` is a true content offset → `sectionTop`. Same rule
+  as the reel: **do not wrap it in another `<View>`** or `sectionTop` reads 0 and every scene's
+  entrance math breaks.
+- It renders a chapter header (`0.55×vh`) then 3 panels each exactly `1×vh` tall. Each scene knows
+  its own `panelOffset` (a plain number: `headerH + index×vh`); with `sectionTop` (shared) it
+  computes, in worklets, `enter` (0→1 as the panel rises into place) and `rel` (signed
+  distance-from-centred, for parallax). **Nothing is measured per element** — deterministic across
+  devices, like the reel's fixed-height band.
+- Counters are `Animated.createAnimatedComponent(TextInput)` with `useAnimatedProps` setting `text`
+  — the number ticks on the UI thread with **zero React re-renders** (the phase's hard constraint).
+  This is the standard RN reanimated counter trick; `editable={false}` + `defaultValue` keeps it
+  uncontrolled.
+
+**Tuning knobs (plan budgets 2–3 feel loops — these are the dials):**
+- `tau` in `useSmoothFollow` (default `0.12`) — the lag. Higher = floatier / more Lenis, lower =
+  tighter to the finger. Try `0.08–0.16`. If it ever feels *disconnected*, lower it.
+- `HEADER_FACTOR` (`0.55`) and the per-scene `enter` input ranges (`[p − 0.72vh, p − 0.08vh]`) in
+  `useSceneProgress` — when each scene starts/finishes revealing relative to its resting position.
+- Per-element stagger fractions inside each scene (skill rows, stat tiles, milestones).
+- `GhostWord` scale (`2.3`) + opacity range (`0.015→0.06`) — the decorative watermark depth.
+
+**Content is derived, not invented.** `src/content/journey.ts` builds skills (curated from the
+union of project stacks), stats (`products = projects.length`, `years = max−min+1`, plus 60fps /
+100% hand-built), and the timeline (roster grouped by year) straight from `projects.ts`. So the
+**still-open content debt is unchanged** — the underlying Vibely / SpeakWell / Kodean copy + empty
+`links: []` in `projects.ts` are still inferred and still need your ground truth **before Phase 5**
+(it morphs these same cards into detail screens). Fixing `projects.ts` now also firms up this
+section's skills/timeline for free.
+
+**On-device checklist (Definition of Done — needs you, `npm start` → Expo Go):**
+1. Scroll past the reel into "Momentum, smoothed." The scroll should feel *buttery* — scene
+   animations float a beat behind the finger, fling still decelerates naturally (native), slow-drag
+   is smooth, both ends feel deliberate.
+2. Skills rows stagger in from alternating sides; stat numbers **count up** as that scene enters;
+   the timeline rail **draws down** and milestones reveal in order.
+3. **Perf monitor on** — 60fps sustained through all three scenes, no JS-thread jank. (The follower
+   goes quiet at rest, so idle-frame cost should be nil.)
+4. If the lag feels wrong, turn `tau` first; if a scene reveals too early/late, adjust its `enter`
+   ranges. Merge once it's right.
+
+**Out of scope, as planned:** snap-to-scene (omitted — would fight the act-wide native scroll),
+shared-element morphs + card deck (Phase 5), Stripe (Phase 6).
 
 ### On-device pass 1 corrections (same day, 2026-07-13)
 
