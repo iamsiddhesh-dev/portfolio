@@ -301,7 +301,7 @@ function TimelineScene({
             <Animated.View style={[styles.railFill, fillStyle]} />
           </View>
           {milestones.map((m, i) => (
-            <MilestoneRow key={m.year} milestone={m} enter={enter} index={i} total={milestones.length} />
+            <MilestoneRow key={m.title} milestone={m} enter={enter} index={i} total={milestones.length} />
           ))}
         </View>
       </View>
@@ -338,10 +338,10 @@ function MilestoneRow({
       </View>
       <View style={styles.milestoneBody}>
         <Text variant="h3" color="accent">
-          {milestone.year}
+          {milestone.title}
         </Text>
         <Text variant="body" color="textSecondary">
-          {milestone.names.join(' · ')}
+          {milestone.detail}
         </Text>
       </View>
     </Animated.View>

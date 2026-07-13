@@ -21,28 +21,24 @@ export const skills: { label: string; note: string }[] = [
 
 /* ── Scene 2 — by the numbers ──
  * Derived where possible so the figures can't drift from the real roster. */
-const years = projects.map((p) => Number(p.year)).filter((y) => !Number.isNaN(y));
-const spanYears = years.length ? Math.max(...years) - Math.min(...years) + 1 : 0;
+const liveCount = projects.filter((p) => p.links.some((l) => /live|demo/i.test(l.label))).length;
 
 export type Stat = { value: number; suffix?: string; label: string };
 
 export const stats: Stat[] = [
   { value: projects.length, label: 'Products shipped' },
   { value: 60, label: 'fps, hand-tuned' },
-  { value: spanYears, label: 'Years building' },
+  { value: liveCount, label: 'Live deployments' },
   { value: 100, suffix: '%', label: 'Motion hand-built' },
 ];
 
 /* ── Scene 3 — the path ──
- * The roster grouped by year, newest last, so the timeline reads bottom-up as
- * the line draws down. Built straight from `projects.ts`. */
-export type Milestone = { year: string; names: string[] };
+ * A per-project build log (the roster is all recent, so a year axis would just
+ * collapse to one row). One entry per project in roster order; the rail draws
+ * down through them. Built straight from `projects.ts`. */
+export type Milestone = { title: string; detail: string };
 
-export const milestones: Milestone[] = Object.entries(
-  projects.reduce<Record<string, string[]>>((acc, p) => {
-    (acc[p.year] ??= []).push(p.name);
-    return acc;
-  }, {}),
-)
-  .sort(([a], [b]) => Number(a) - Number(b))
-  .map(([year, names]) => ({ year, names }));
+export const milestones: Milestone[] = projects.map((p) => ({
+  title: p.name,
+  detail: p.role,
+}));
