@@ -306,9 +306,9 @@ A recruiter taps the link, installs the APK, and signs up — but instead of a b
   never rendered) — **still needs Siddhesh's ground-truth verification**, see handoff. tsc /
   `expo lint` / `expo export` (android) all clean. NOTE: the pinning approach described below
   was rearchitected the same day — see "On-device pass 1 corrections" for the shipped design.
-- [~] **Phase 4 — Big Smooth Scroll** (2026-07-13): Built on
-  `feature/phase-4-momentum-scroll` (not merged — waits for the on-device pass, same as
-  Phase 3). **Key technical decision made: smoothed spring-follow of native `scrollY`, NOT
+- [x] **Phase 4 — Big Smooth Scroll** (2026-07-13): **Merged to `main`** (was
+  `feature/phase-4-momentum-scroll`), pushed. **On-device confirmed by user** — momentum
+  feel + scenes working. **Key technical decision made: smoothed spring-follow of native `scrollY`, NOT
   custom `Gesture.Pan` + `withDecay`** — see handoff for the full rationale. Native scroll
   keeps its (already excellent) momentum; a UI-thread lerp follower (`useSmoothFollow`)
   reproduces Lenis's *lag*, and every scene rides that one `smooth` value. New momentum
@@ -319,8 +319,7 @@ A recruiter taps the link, installs the APK, and signs up — but instead of a b
   reveal). Content in new `src/content/journey.ts`, all *derived* from `projects.ts` (roster,
   years, stacks) so nothing new is fabricated. Snap-to-scene deliberately omitted (would fight
   the act-wide native scroll). Footer teaser copy updated (no longer promises a future pass).
-  tsc / `expo lint` / `expo export` (android) all clean. **Still needs the on-device pass** —
-  momentum/scene feel + 60fps — before merge.
+  tsc / `expo lint` / `expo export` (android) all clean.
 - [ ] Phase 5 — Pattern Breadth Trio
 - [ ] Phase 6 — Stripe Exit
 - [ ] Phase 7 — Polish & Ship
@@ -517,8 +516,8 @@ a haptic + press-scale only (no navigation) — the tap target is built, the des
 
 ### Handoff notes (after Phase 4)
 
-**Not merged.** Lives on `feature/phase-4-momentum-scroll` (commit `06d0f9d`). Merge after the
-on-device checklist below feels right — the momentum *feel* genuinely can't be judged off-device.
+**Merged to `main` and pushed** (on-device confirmed by the user — momentum + scenes work).
+The checklist at the bottom of these notes is retained as the record of what was verified.
 
 **The key decision — smoothed follow, not custom decay (spiked both, committed to one):**
 - **Chosen: smoothed spring-follow of native `scrollY`.** Native mobile scroll already owns
