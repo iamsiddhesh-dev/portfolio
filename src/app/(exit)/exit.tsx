@@ -136,6 +136,7 @@ export default function ExitScreen() {
             key="celebrating"
             from={{ opacity: 0 }}
             animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
             transition={{ type: 'timing', duration: theme.duration.fast }}
             style={styles.container}
           >

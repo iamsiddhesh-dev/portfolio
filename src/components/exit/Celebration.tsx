@@ -6,7 +6,7 @@
  * own doc-comment — this is exactly that moment). Calls `onDone` once the
  * burst settles so the caller can advance to the sign-off screen.
  */
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, {
   Easing,
@@ -29,15 +29,24 @@ export function Celebration({ onDone }: { onDone: () => void }) {
   const orbScale = useSharedValue(0);
   const burst = useSharedValue(0);
 
+  // Kept in a ref so the burst effect below only ever runs once on mount,
+  // even if the parent re-renders mid-celebration with a new `onDone`
+  // reference — re-running it would restart the burst from wherever it
+  // already got to and could fire the completion callback more than once.
+  const onDoneRef = useRef(onDone);
+  onDoneRef.current = onDone;
+
   useEffect(() => {
     orbScale.value = withSpring(1, theme.spring.bouncy);
     burst.value = withDelay(
       80,
       withTiming(1, { duration: 750, easing: Easing.out(Easing.cubic) }, (finished) => {
-        if (finished) runOnJS(onDone)();
+        if (finished) runOnJS(() => onDoneRef.current())();
       }),
     );
-  }, [orbScale, burst, onDone]);
+    // Runs once per mount, by design — see onDoneRef above.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const orbStyle = useAnimatedStyle(() => ({
     transform: [{ scale: orbScale.value }],
