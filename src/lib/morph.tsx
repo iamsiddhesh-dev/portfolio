@@ -23,7 +23,7 @@
  * Mounted once in `(portfolio)/_layout.tsx`, above the Stack, so it can draw
  * over both the grid screen and the detail screen regardless of navigation.
  */
-import { createContext, useContext, useRef, useState, type PropsWithChildren } from 'react';
+import { createContext, useContext, useState, type PropsWithChildren } from 'react';
 import { StyleSheet, useWindowDimensions } from 'react-native';
 import Animated, {
   Extrapolation,
@@ -70,7 +70,13 @@ export function MorphProvider({
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
 
   const [project, setProject] = useState<Project | null>(null);
-  const originRef = useRef<Frame>(ZERO_FRAME);
+  // A shared value, not a plain ref — this is read inside UI-thread worklets
+  // below (`frameStyle`/`miniCardStyle`), and only shared values have defined,
+  // cross-thread-safe behavior there. A `useRef` read inside a worklet has no
+  // guaranteed behavior on native (it can appear to work in Reanimated's
+  // same-thread web fallback while silently failing on the real dual-runtime
+  // native setup) — don't reintroduce one here.
+  const origin = useSharedValue<Frame>(ZERO_FRAME);
 
   const progress = useSharedValue(0); // 0 = card frame, 1 = full screen
   const contentMix = useSharedValue(0); // 0 = mini card content, 1 = full hero content
@@ -85,7 +91,7 @@ export function MorphProvider({
   };
 
   const open = (nextProject: Project, frame: Frame) => {
-    originRef.current = frame;
+    origin.value = frame;
     setProject(nextProject);
     progress.value = 0;
     contentMix.value = 0;
@@ -118,14 +124,14 @@ export function MorphProvider({
   const containerStyle = useAnimatedStyle(() => ({ opacity: visible.value }));
 
   const frameStyle = useAnimatedStyle(() => {
-    const origin = originRef.current;
+    const o = origin.value;
     const fullCx = screenWidth / 2;
     const fullCy = screenHeight / 2;
-    const originCx = origin.x + origin.width / 2;
-    const originCy = origin.y + origin.height / 2;
+    const originCx = o.x + o.width / 2;
+    const originCy = o.y + o.height / 2;
 
-    const scaleX = interpolate(progress.value, [0, 1], [origin.width / screenWidth, 1], Extrapolation.CLAMP);
-    const scaleY = interpolate(progress.value, [0, 1], [origin.height / screenHeight, 1], Extrapolation.CLAMP);
+    const scaleX = interpolate(progress.value, [0, 1], [o.width / screenWidth, 1], Extrapolation.CLAMP);
+    const scaleY = interpolate(progress.value, [0, 1], [o.height / screenHeight, 1], Extrapolation.CLAMP);
     const translateX = interpolate(progress.value, [0, 1], [originCx - fullCx, 0], Extrapolation.CLAMP);
     const translateY = interpolate(progress.value, [0, 1], [originCy - fullCy, 0], Extrapolation.CLAMP);
 
@@ -139,12 +145,12 @@ export function MorphProvider({
   // Pinned at the real measured card rect — never scaled, so its text stays
   // crisp while it simply fades out early in the timeline.
   const miniCardStyle = useAnimatedStyle(() => {
-    const origin = originRef.current;
+    const o = origin.value;
     return {
-      left: origin.x,
-      top: origin.y,
-      width: origin.width,
-      height: origin.height,
+      left: o.x,
+      top: o.y,
+      width: o.width,
+      height: o.height,
       opacity: interpolate(contentMix.value, [0, 0.35], [1, 0], Extrapolation.CLAMP),
     };
   });
@@ -157,29 +163,33 @@ export function MorphProvider({
     <MorphContext.Provider value={{ open, close }}>
       {children}
 
-      <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.overlay, containerStyle]}>
-        <Animated.View style={[StyleSheet.absoluteFill, frameStyle]} />
+      {/* Mounted ONLY during an active morph. Keeping a full-screen, high-
+          `elevation` overlay permanently mounted paints a dark fill over the
+          whole app on Android — an animated `opacity: 0` doesn't reliably hide
+          an elevated view there (elevation composites natively), even though it
+          does on web/iOS. Gating on `project` means at rest there's nothing over
+          the screen at all. */}
+      {project ? (
+        <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.overlay, containerStyle]}>
+          <Animated.View style={[StyleSheet.absoluteFill, frameStyle]} />
 
-        {project ? (
-          <>
-            <Animated.View style={[styles.miniCard, miniCardStyle]}>
-              <Text variant="overline" color="accent">
-                {project.year}
-              </Text>
-              <Text variant="h3" numberOfLines={1}>
-                {project.name}
-              </Text>
-              <Text variant="caption" color="textSecondary" numberOfLines={2}>
-                {project.tagline}
-              </Text>
-            </Animated.View>
+          <Animated.View style={[styles.miniCard, miniCardStyle]}>
+            <Text variant="overline" color="accent">
+              {project.year}
+            </Text>
+            <Text variant="h3" numberOfLines={1}>
+              {project.name}
+            </Text>
+            <Text variant="caption" color="textSecondary" numberOfLines={2}>
+              {project.tagline}
+            </Text>
+          </Animated.View>
 
-            <Animated.View style={[StyleSheet.absoluteFill, heroContentStyle]}>
-              <ProjectHero project={project} />
-            </Animated.View>
-          </>
-        ) : null}
-      </Animated.View>
+          <Animated.View style={[StyleSheet.absoluteFill, heroContentStyle]}>
+            <ProjectHero project={project} />
+          </Animated.View>
+        </Animated.View>
+      ) : null}
     </MorphContext.Provider>
   );
 }
