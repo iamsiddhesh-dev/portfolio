@@ -333,22 +333,23 @@ A recruiter taps the link, installs the APK, and signs up — but instead of a b
   permanent): a `moti`/`framer-motion`/`tslib` runtime crash (`metro.config.js` resolver
   workaround) and missing `@expo/ngrok` for tunnel mode. tsc / `expo lint` /
   `expo export` (android) all clean throughout.
-- [x] **Phase 6 — Stripe Exit** (2026-07-14): Code complete on
-  `feature/phase-6-stripe-exit`, **not merged — blocked on user for keys,
-  deploy, and the on-device dev-client build** (see handoff; this is the
-  first phase that structurally can't be verified from here). Installed
-  `expo-dev-client` + `@stripe/stripe-react-native` (config plugin added to
-  `app.json`, `eas.json`'s `development` profile already had
+- [x] **Phase 6 — Stripe Exit** (2026-07-14): **Merged to `main` and pushed.
+  On-device confirmed by the user on Android** — tip → PaymentSheet (card,
+  Link, and Cash App all worked) → celebration → sign-off all working after
+  fixing two real on-device-only bugs found post-build (see "On-device
+  debugging" below — worth reading before touching `Celebration.tsx` again).
+  Installed `expo-dev-client` + `@stripe/stripe-react-native` (config plugin
+  added to `app.json`, `eas.json`'s `development` profile already had
   `developmentClient: true` from Phase 1). Root layout wraps the tree in
   `StripeProvider`. One serverless endpoint (`server/api/create-payment-intent.ts`,
-  its own small Vercel project under `server/`) mints a PaymentIntent for one
-  of three allowed preset amounts only (300/500/1000 cents) — the endpoint is
-  intentionally unauthenticated, so the allow-list is what caps abuse. Exit
-  screen rebuilt as a three-stage Moti `AnimatePresence` machine (`select` →
-  `celebrating` → `signoff`) in `(exit)/exit.tsx`: preset `TipCard`s → Stripe
-  `initPaymentSheet`/`presentPaymentSheet` → on success a particle-burst +
-  `AccentOrb` `Celebration` (`theme.spring.bouncy`, the spring already
-  earmarked for this) → `SignOff` (thank-you copy, GitHub link via the
+  its own small Vercel project under `server/`, deployed to Vercel) mints a
+  PaymentIntent for one of three allowed preset amounts only (300/500/1000
+  cents) — the endpoint is intentionally unauthenticated, so the allow-list is
+  what caps abuse. Exit screen rebuilt as a three-stage Moti `AnimatePresence`
+  machine (`select` → `celebrating` → `signoff`) in `(exit)/exit.tsx`: preset
+  `TipCard`s → Stripe `initPaymentSheet`/`presentPaymentSheet` → on success a
+  particle-burst + `AccentOrb` `Celebration` (`theme.spring.bouncy`, the spring
+  already earmarked for this) → `SignOff` (thank-you copy, GitHub link via the
   existing `ProjectLinks` pill, replay/back). Cancel is silent (returns to
   `select`); any other PaymentSheet error or non-2xx from the endpoint shows
   inline `danger`-colored text. tsc / `expo lint` / `expo export` (android)
@@ -733,6 +734,55 @@ knobs if it ever needs revisiting: `theme.duration.slow`/`base`/`fast` in `morph
 morph timing; `SWIPE_VELOCITY_THRESHOLD` / the `withDecay` `deceleration` in `CardDeck.tsx` for
 fling feel.
 
+### On-device debugging: the celebration → sign-off handoff (same day, 2026-07-14)
+
+Both bugs below only ever showed up on the on-device dev-client build — tsc, `expo lint`, and
+`expo export` were clean throughout, the exact same "static checks can't see this" pattern as
+Phase 5's black screen below. Both are in the `celebrating → signoff` stage transition specifically.
+
+**1. Sign-off screen never appeared — stuck on a faded-out celebration forever.** The exit
+screen's three stages (`select` / `celebrating` / `signoff`) are one Moti `AnimatePresence
+exitBeforeEnter` tree in `exit.tsx`. `exitBeforeEnter` waits for the outgoing element's `exit`
+transition to finish before mounting the next one. The `celebrating` stage's `MotiView` had `from`
+and `animate` props but no `exit` prop — unlike `select`, which had one. Without an explicit
+`exit`, the wait for "the exit transition to finish" never resolved, so `signoff` never mounted;
+the user saw the celebration fade to nothing and then just nothing, permanently, until backing
+out. **Fixed by adding `exit={{ opacity: 0 }}` to the `celebrating` `MotiView`**, matching the
+pattern already used by `select`. Lesson for future stages in this machine: every non-terminal
+stage in an `exitBeforeEnter` chain needs an explicit `exit`, or the chain stalls silently with no
+error anywhere.
+
+**2. A genuine native crash (SIGABRT), not a JS error — `runOnJS` given a closure created inside a
+worklet.** After fixing bug 1, tipping succeeded and the celebration played for ~2 seconds, then
+the whole app crashed and kicked the user out — no red-box, nothing in the Metro terminal, because
+this was a real native abort, not a JS exception. Root-caused with `adb logcat` (device connected
+via USB; `adb` wasn't on `PATH` but was found bundled in the existing Android SDK install at
+`%LOCALAPPDATA%\Android\Sdk\platform-tools`): the abort message was
+`jsi.h:1347: HostFunctionType &facebook::jsi::Function::getHostFunction(Runtime &) const:
+assertion "isHostFunction(runtime)" failed`, inside `libworklets.so`. Cause:
+`Celebration.tsx`'s `withTiming` completion callback (itself auto-workletized by Reanimated's
+babel plugin, since it's passed to an animation function) called
+`runOnJS(() => onDoneRef.current())()` — a **fresh arrow function declared inline, inside worklet
+code**. Reanimated's compiler doesn't handle a closure declared inside one worklet being handed to
+`runOnJS` as if it were a plain outer-scope JS function; the native side ends up with something
+that isn't a recognized host function and aborts. **Fixed by hoisting a stable `handleDone`
+callback (`useCallback`, wrapping a ref read) to the component's own JS scope, outside any
+worklet, and passing that reference to `runOnJS` instead.** General rule this confirms for the
+rest of the codebase: `runOnJS`'s argument must always be a function defined outside worklet
+code — never construct one inline at the call site if that call site is itself inside a worklet
+(an animation callback, a `useAnimatedStyle` body, etc.).
+
+**Neither fix required a new EAS build** — both were pure JS/TS changes, reloaded via Metro
+(`npx expo start --dev-client`, then reload) against the same dev-client APK from the
+`@expo/ui`-removal build below.
+
+**Also fixed, unrelated to Stripe itself, found before either bug above:** `@expo/ui`
+(`~0.2.0-beta.9`) was a leftover scaffold dependency, never imported anywhere in `src/`, and its
+beta native Kotlin module failed to resolve (`NoClassDefFoundError`) during native module
+registration in this project's first-ever dev-client build — crashing the app before any JS ran,
+on every screen, not just the exit act. Removed entirely from `package.json`; this **did** require
+a fresh EAS build to take effect (it's a native dependency change).
+
 ### On-device debugging: the black screen (same day, 2026-07-13)
 
 The built code passed every static check (tsc, `expo lint`, `expo export` for android and web,
@@ -803,12 +853,14 @@ touched.
 
 ### Handoff notes (after Phase 6)
 
-**Not merged. Lives on `feature/phase-6-stripe-exit`.** Unlike every prior phase, this one is
-structurally blocked on the user for verification — there is no static check that can confirm a
-real Stripe PaymentSheet round-trip, and per the Phase 5 lesson ("it compiles" ≠ "it works" for
-anything native), this absolutely needs the on-device pass before merging.
+**Merged to `main` and pushed. On-device confirmed by the user on Android** — tip → PaymentSheet
+(tested with card, Link, and Cash App) → celebration → sign-off, full loop working. Getting here
+took a real on-device debugging pass after static checks passed clean, continuing the exact
+pattern from Phase 5's black-screen bugs: **"it compiles" ≠ "it works" for anything native.**
+Read "On-device debugging" below before touching `Celebration.tsx` or the `exit.tsx` stage
+machine again.
 
-**Three things need you, in order, before this can be tested at all:**
+**Setup steps a future session (or a fresh machine) will need to repeat, in order:**
 1. **Stripe test-mode keys.** Create/open a Stripe account, switch to test mode.
    - Publishable key (`pk_test_...`) → `.env.local` → `EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY`.
    - Secret key (`sk_test_...`) → goes to the *server* deploy below, never into the app.
@@ -876,16 +928,10 @@ test-mode-only end to end), Apple/Google Pay (the config plugin is wired with
 `enableGooglePay: false` and a placeholder `merchantIdentifier` — neither is exercised),
 webhooks, receipts. Content debt in `projects.ts` is unchanged, again.
 
-**On-device checklist (Definition of Done — needs you, after the three setup steps above, on the
-dev-client build via `npx expo start --dev-client`):**
-1. Sign in → scroll to the exit → confirm the tip screen renders (not the old placeholder).
-2. Pick a preset, tip, and complete PaymentSheet with `4242 4242 4242 4242` → confirm the payment
-   shows up in the Stripe test dashboard → celebration plays → sign-off screen appears.
-3. From sign-off, "Tip again" returns cleanly to preset selection (the replay path).
-4. Start a tip and back out of PaymentSheet without paying → confirm it returns to `select` with
-   no error message (this is the cancel path, not a failure).
-5. Tip again using the decline card `4000 0000 0000 0002` → confirm a graceful inline error
-   message appears (not a crash, not a silent failure).
-6. Meets art-direction spec (no default system font/colors snuck in via `ActivityIndicator`'s
-   platform-default spinner color, etc. — check it reads as intentional, not default-gray).
-Merge once all six pass.
+**On-device checklist — confirmed by the user on Android:** tip screen renders (not the old
+placeholder); PaymentSheet completes successfully with real test-mode payment methods (card,
+Link, and Cash App were all tried and worked); the payment appears in the Stripe test dashboard;
+celebration plays; sign-off screen appears with working "Tip again" (replay) and "Back to
+portfolio". Cancel-without-paying and the `4000 0000 0000 0002` decline card were implemented per
+plan but not explicitly re-itemized after the two fixes below — worth a quick re-check next
+session before assuming they still behave, though neither code path was touched by either fix.
