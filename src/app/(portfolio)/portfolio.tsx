@@ -7,8 +7,10 @@ import Animated, { useAnimatedScrollHandler, useSharedValue } from 'react-native
 import { Button } from '@/components/Button';
 import { Screen } from '@/components/Screen';
 import { Text } from '@/components/Text';
+import { CardDeck } from '@/components/portfolio/CardDeck';
 import { Hero } from '@/components/portfolio/Hero';
 import { MomentumScrollSection } from '@/components/portfolio/MomentumScrollSection';
+import { ProjectGrid } from '@/components/portfolio/ProjectGrid';
 import { PIN_MULTIPLIER, ReverseScrollReel } from '@/components/portfolio/ReverseScrollSection';
 import { haptics } from '@/lib/haptics';
 import { theme } from '@/theme/theme';
@@ -80,6 +82,12 @@ export default function PortfolioScreen() {
           {/* Phase 4 — the long momentum scroll. A direct child of the scroll
               content so it can measure its own top offset (like the reel spacer). */}
           <MomentumScrollSection scrollY={scrollY} viewportHeight={viewportHeight} />
+
+          <View style={styles.padded}>
+            <ProjectGrid />
+          </View>
+
+          <CardDeck />
 
           <View style={[styles.padded, styles.footer]}>
             <Text variant="overline" color="textMuted">

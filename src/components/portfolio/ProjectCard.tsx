@@ -2,9 +2,12 @@
  * A single project tile, sized to a FIXED height so the reverse-scroll column
  * math stays deterministic (travel = contentHeight − viewportHeight, and content
  * height must be knowable without measuring every card). Premium bar: spring
- * press + haptic tick on every card, even though the tap target (detail-screen
- * morph) doesn't land until Phase 5 — the interaction is built with the element.
+ * press + haptic tick on every card. `onPress` is optional — the reel streams
+ * inert instances (no tap target, pointerEvents="none" on its wrapper); the
+ * tappable grid (Phase 5) passes it to drive the shared-element morph, using
+ * the forwarded ref to measure the card's on-screen frame at tap time.
  */
+import { forwardRef } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 
@@ -19,19 +22,25 @@ export const CARD_GAP = theme.spacing.lg;
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
-export function ProjectCard({ project, index }: { project: Project; index: number }) {
+type ProjectCardProps = { project: Project; index: number; onPress?: () => void };
+
+export const ProjectCard = forwardRef<View, ProjectCardProps>(function ProjectCard(
+  { project, index, onPress },
+  ref,
+) {
   const pressed = useSharedValue(0);
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: 1 - pressed.value * 0.03 }],
-    borderColor:
-      pressed.value > 0 ? theme.colors.hairlineStrong : theme.colors.hairline,
+    borderColor: pressed.value > 0 ? theme.colors.hairlineStrong : theme.colors.hairline,
   }));
 
   return (
     <AnimatedPressable
+      ref={ref}
       accessibilityRole="button"
       accessibilityLabel={`${project.name} — ${project.tagline}`}
+      onPress={onPress}
       onPressIn={() => {
         pressed.value = withSpring(1, theme.spring.press);
         haptics.selection();
@@ -70,7 +79,7 @@ export function ProjectCard({ project, index }: { project: Project; index: numbe
       </View>
     </AnimatedPressable>
   );
-}
+});
 
 const styles = StyleSheet.create({
   card: {
