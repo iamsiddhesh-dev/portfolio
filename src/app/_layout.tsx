@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { ClerkLoaded, ClerkProvider, useAuth } from '@clerk/expo';
 import { tokenCache } from '@clerk/expo/token-cache';
+import { StripeProvider } from '@stripe/stripe-react-native';
 import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
@@ -22,6 +23,13 @@ if (!process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY) {
 }
 const publishableKey: string = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
 
+if (!process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY) {
+  throw new Error(
+    'Missing EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY — copy .env.example to .env.local and fill in your Stripe test publishable key.',
+  );
+}
+const stripePublishableKey: string = process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY;
+
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts(fontAssets);
 
@@ -38,12 +46,14 @@ export default function RootLayout() {
   return (
     <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
       <ClerkLoaded>
-        <GestureHandlerRootView style={styles.root}>
-          <SafeAreaProvider>
-            <StatusBar style="light" />
-            <RootNavigator />
-          </SafeAreaProvider>
-        </GestureHandlerRootView>
+        <StripeProvider publishableKey={stripePublishableKey}>
+          <GestureHandlerRootView style={styles.root}>
+            <SafeAreaProvider>
+              <StatusBar style="light" />
+              <RootNavigator />
+            </SafeAreaProvider>
+          </GestureHandlerRootView>
+        </StripeProvider>
       </ClerkLoaded>
     </ClerkProvider>
   );
