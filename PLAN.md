@@ -320,7 +320,19 @@ A recruiter taps the link, installs the APK, and signs up — but instead of a b
   years, stacks) so nothing new is fabricated. Snap-to-scene deliberately omitted (would fight
   the act-wide native scroll). Footer teaser copy updated (no longer promises a future pass).
   tsc / `expo lint` / `expo export` (android) all clean.
-- [ ] Phase 5 — Pattern Breadth Trio (built, **not on-device verified**, see handoff)
+- [x] **Phase 5 — Pattern Breadth Trio** (2026-07-13): **Merged to `main`**, pushed.
+  On-device confirmed by user on Android and iOS — card→detail morph, full roster grid,
+  and swipe deck all working. Shared-element morph (`src/lib/morph.tsx`) — three-layer FLIP
+  technique (colour-block frame + unscaled mini-card text + real `ProjectHero` crossfade),
+  detail route at `project/[id].tsx`. Gesture-physics card deck (`CardDeck.tsx`) —
+  `Gesture.Pan` + spring snap-back / `withDecay` fling-dismiss, loops forever. Skia
+  consciously dropped (droppable per plan; both patterns above were the full session's depth
+  budget). **Two real, non-obvious bugs found and fixed post-initial-build — see handoff,
+  worth reading before touching `(portfolio)/_layout.tsx` or `src/lib/morph.tsx` again.**
+  Also fixed two unrelated pre-existing environment issues hit mid-session (both now
+  permanent): a `moti`/`framer-motion`/`tslib` runtime crash (`metro.config.js` resolver
+  workaround) and missing `@expo/ngrok` for tunnel mode. tsc / `expo lint` /
+  `expo export` (android) all clean throughout.
 - [ ] Phase 6 — Stripe Exit
 - [ ] Phase 7 — Polish & Ship
 
@@ -617,12 +629,13 @@ on-device pass (auth round-trip + reel feel) before merge.
 
 ### Handoff notes (after Phase 5)
 
-**Not merged.** Lives on `feature/phase-5-pattern-breadth`. Built and statically verified
-(tsc / `expo lint` / `expo export` android / `expo-doctor` all clean — 17/18, same accepted
-`expo-modules-core` false-positive as every prior phase) but **not yet run on-device** — the
-morph's frame math and the deck's gesture feel are exactly the kind of thing that can look
-right on paper and wrong on a real screen, so this is not a "quietly ship it" phase. See the
-checklist at the bottom.
+**Merged to `main` and pushed. On-device confirmed on both Android and iOS** — card→detail
+morph, full roster grid, and swipe deck all working. Getting here took real on-device
+debugging after the initial build looked clean (tsc / `expo lint` / `expo export` /
+`expo-doctor` all passed statically but the app rendered a **fully black portfolio screen**
+on native while working fine on web) — **read "On-device debugging: the black screen" below
+before touching `(portfolio)/_layout.tsx` or `src/lib/morph.tsx` again**, it documents two
+real, non-obvious native-only bugs and the reasoning trail that found them.
 
 **(a) Shared-element morph — three independent layers, not one scaled view.** Lives in
 [`src/lib/morph.tsx`](src/lib/morph.tsx) (`MorphProvider` / `useMorph`), mounted once in
@@ -643,12 +656,8 @@ design splits it into three layers, all driven by one `progress` (0→1, frame g
      component the real detail route renders, fading in over the last 50% of `contentMix`.
   Origin frame is measured via `measureInWindow` on tap (in
   [`ProjectGrid`](src/components/portfolio/ProjectGrid.tsx), the reel's un-tappable streaming cards
-  aren't the entry point) and stored in a plain `useRef` — **not** a shared value. This works
-  because `useAnimatedStyle`'s worklet closures are recreated on every JS render, and `open()`
-  calls `setProject()` (triggering that re-render) *after* writing the ref, so each fresh worklet
-  captures the correct frame at creation time. It would silently break if the ref were ever read
-  inside a *long-lived* worklet that isn't recreated per-render (e.g. a `useDerivedValue` with no
-  reactive deps) — don't refactor it that way without switching to a real shared value.
+  aren't the entry point) and stored in a **`useSharedValue<Frame>`** — see the black-screen
+  writeup below for why this must never go back to a plain `useRef`.
   The real detail route ([`project/[id].tsx`](<src/app/(portfolio)/project/[id].tsx>)) is pushed
   the instant `open()` fires and sits underneath the whole time, already laid out; once
   `progress` finishes (600ms, `emphasizedDecel`) the overlay fades fully invisible (`visible`
@@ -695,27 +704,77 @@ the icon pipeline uses `expo-image`'s built-in SVG support instead), so no nativ
 needed — just model-effort should bump to Fable/Opus per the routing table, since shader work is
 a different kind of hard than anything built this phase.
 
-**On-device checklist (Definition of Done — needs you, `npm start` → Expo Go):**
-1. Scroll to "Full roster" (past the momentum section). Tap any card — it should **expand
-   continuously into the detail screen**, no flash, no jump, no visible seam where the overlay
-   hands off to the real screen. Watch specifically for: text squashing during the grow (would
-   mean the layer-split above has a bug), and a visible "pop" right as the overlay disappears
-   (would mean `ProjectHero`'s padding/positioning has drifted from what the overlay renders).
-2. On the detail screen: scroll through description/highlights/stack/links (`ProjectLinks` pills
-   should still open the in-app browser, tint amber — same open item as the Phase-4 handoff, now
-   doubly relevant since it renders on this screen too). Tap the back pill (top-left) — the card
-   should **shrink back to exactly where it was** in the roster list. Confirm the OS back
-   gesture/button does *not* skip the shrink animation (should be disabled for this route).
-3. Scroll to "Swipe through." Drag a card left/right — it should rotate with the drag, and
-   releasing before the threshold should **spring back** to centre. Drag past the threshold (or
-   flick fast) and it should **fly off** in that direction with a haptic tick, and the next card
-   should already be waiting, having glided up from the #2 slot. Confirm a *vertical* drag over
-   the deck scrolls the page normally instead of doing nothing / fighting the gesture.
-4. **Perf monitor on** for both — 60fps during the morph's grow/shrink and during active dragging.
-5. If the morph feels off: the frame/content split above is the thing to re-tune (durations are
-   `theme.duration.slow`/`base`/`fast` in `morph.tsx`, not new constants). If the deck's fling
-   feels too weak/strong: `SWIPE_VELOCITY_THRESHOLD` / the `withDecay` `deceleration` in
-   `CardDeck.tsx`. Merge once both feel right.
+**On-device checklist — confirmed by user, both Android and iOS:** card→detail morph expands
+continuously (no flash/jump/text-squash); detail screen scrolls, `ProjectLinks` pills open the
+in-app browser tinted amber; back pill shrinks the card back to its exact roster position; the
+swipe deck rotates with drag, springs back below threshold, flings + haptic + cycles above
+threshold; vertical drags over the deck scroll the page instead of fighting the gesture. Tuning
+knobs if it ever needs revisiting: `theme.duration.slow`/`base`/`fast` in `morph.tsx` for the
+morph timing; `SWIPE_VELOCITY_THRESHOLD` / the `withDecay` `deceleration` in `CardDeck.tsx` for
+fling feel.
+
+### On-device debugging: the black screen (same day, 2026-07-13)
+
+The built code passed every static check (tsc, `expo lint`, `expo export` for android and web,
+`expo-doctor`) but on the user's actual Android and iOS devices, the portfolio screen rendered
+**fully black** immediately after finishing onboarding — no error, no LogBox, nothing in the
+Metro terminal. It rendered correctly on web the entire time, which was the key misleading
+signal (it made the code *look* correct) and also the key diagnostic clue once used properly:
+web runs Reanimated in a same-thread JS fallback with no real UI-thread boundary, so anything
+that only breaks across that boundary can pass on web and fail silently on native.
+
+**Two real bugs, found by bisection, not by inspection.** Several plausible-looking fixes
+(gating the morph overlay's JSX on `project`, removing an errant `View` wrapping the Stack
+navigator — see below, both real bugs but neither was *the* cause) didn't change the symptom,
+which is what eventually forced a proper isolation approach: temporarily strip pieces out of the
+tree one at a time and reload on-device after each, rather than keep reasoning from the code
+alone. That's what actually found both:
+
+1. **A plain `useRef` read inside a Reanimated `useAnimatedStyle` worklet has no defined
+   behavior on native.** `morph.tsx` stored the tapped card's measured screen frame
+   (`originRef.current = frame`) and read it back inside `frameStyle`/`miniCardStyle`'s
+   worklets. Every other worklet in this codebase (Phases 1–4, all already device-proven) only
+   ever reads `useSharedValue`s inside worklets — that's the one Reanimated primitive with
+   defined cross-thread (JS-thread-write, UI-thread-read) semantics. On web's same-thread
+   fallback a ref "just works" (no thread boundary to cross); on native, reading it from the
+   real UI-thread worklet runtime is unsupported and doesn't error cleanly — it just doesn't
+   render right. **Fixed: `origin` is now a `useSharedValue<Frame>`.**
+2. **The actual cause of the fully-black screen: an ambiguous native-stack initial route.**
+   `(portfolio)/_layout.tsx` declared `<Stack.Screen name="project/[id]" .../>` explicitly (the
+   only way to set `animation: 'none'`/`gestureEnabled: false` on it), while `portfolio` itself
+   was left implicit/file-based — mixing one explicit screen declaration into an otherwise
+   implicit list. On native-stack (Android/iOS), this made the navigator resolve **`project/[id]`
+   itself** as the initial active screen instead of `portfolio` when you land on the group after
+   sign-in. That screen, with no real `id` param, hits `if (!project) return null` — renders
+   *nothing*, throws *nothing*. That's exactly the symptom: solid black (just the base gradient
+   showing through), zero error, because nothing actually failed — you were looking at the
+   correct rendering of the *wrong* screen the whole time. Web never hit this because it resolves
+   the initial screen directly from the URL (`/portfolio`), with no such ambiguity. **Fixed by
+   declaring `portfolio` explicitly too, listed before `project/[id]`** — see the warning comment
+   at the top of `(portfolio)/_layout.tsx`. **If a future phase adds another screen to this group
+   that needs custom `options`, declare every sibling screen explicitly rather than mixing modes
+   again.**
+
+**Also fixed along the way, both real but not the black-screen cause:**
+- A `View` wrapping `<Stack>` in the same layout file collapses a native-stack navigator to zero
+  height (react-native-screens needs the parent to lay out the navigator directly) — harmless on
+  web, invisible on native. Removed; `MorphProvider` itself renders no host view so it's safe to
+  wrap the Stack directly.
+- The morph overlay was mounted unconditionally (even with nothing active) with `elevation: 50`;
+  an animated `opacity: 0` doesn't reliably hide a high-elevation view on Android the way it does
+  on web/iOS. Now gated on `project !== null` so nothing is mounted at rest.
+
+**Two unrelated environment issues hit mid-session, also fixed, both permanent:**
+- `moti` → `framer-motion` → `tslib`'s package-exports map resolves to a `modules/index.js` shim
+  that crashes under Metro's Node-side static-eval require (`Cannot destructure property
+  '__extends' of 'tslib.default'`) — happens on every platform since `moti` imports
+  `framer-motion` unconditionally for `AnimatePresence`. Fixed with a `metro.config.js` resolver
+  that disables package-exports for `tslib` specifically (falls back to its working `main`/
+  `module` entry). Not a version issue — a same-version reinstall didn't help; only the resolver
+  override did.
+- `--tunnel` mode needs `@expo/ngrok`, which Expo auto-installs on first use — on a flaky
+  connection that live download itself was what timed out. Pre-installed as a devDependency so
+  tunnel mode no longer depends on a mid-command download succeeding.
 
 **Out of scope, as planned:** Skia (dropped, see above), Stripe (Phase 6). Content debt in
 `projects.ts` (Vibely/SpeakWell copy still inferred, `draft: true`) is unchanged by this phase —
