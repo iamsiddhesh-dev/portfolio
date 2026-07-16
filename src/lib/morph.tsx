@@ -38,6 +38,7 @@ import Animated, {
 import { ProjectHero } from '@/components/portfolio/ProjectHero';
 import { Text } from '@/components/Text';
 import type { Project } from '@/content/projects';
+import { useReducedMotion } from '@/lib/useReducedMotion';
 import { theme } from '@/theme/theme';
 
 export type Frame = { x: number; y: number; width: number; height: number };
@@ -68,6 +69,7 @@ export function MorphProvider({
   onNavigateClose: () => void;
 }>) {
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
+  const reducedMotion = useReducedMotion();
 
   const [project, setProject] = useState<Project | null>(null);
   // A shared value, not a plain ref — this is read inside UI-thread worklets
@@ -98,14 +100,20 @@ export function MorphProvider({
     visible.value = 1;
     progress.value = withTiming(
       1,
-      { duration: theme.duration.slow, easing: theme.easing.emphasizedDecel },
+      { duration: reducedMotion ? 0 : theme.duration.slow, easing: theme.easing.emphasizedDecel },
       (finished) => {
         if (finished) {
-          visible.value = withTiming(0, { duration: theme.duration.fast, easing: theme.easing.standard });
+          visible.value = withTiming(0, {
+            duration: reducedMotion ? 0 : theme.duration.fast,
+            easing: theme.easing.standard,
+          });
         }
       },
     );
-    contentMix.value = withTiming(1, { duration: theme.duration.base, easing: theme.easing.standard });
+    contentMix.value = withTiming(1, {
+      duration: reducedMotion ? 0 : theme.duration.base,
+      easing: theme.easing.standard,
+    });
     onNavigateOpen(nextProject);
   };
 
@@ -113,12 +121,15 @@ export function MorphProvider({
     visible.value = 1;
     progress.value = withTiming(
       0,
-      { duration: theme.duration.base, easing: theme.easing.emphasizedAccel },
+      { duration: reducedMotion ? 0 : theme.duration.base, easing: theme.easing.emphasizedAccel },
       (finished) => {
         if (finished) runOnJS(finishClose)();
       },
     );
-    contentMix.value = withTiming(0, { duration: theme.duration.base, easing: theme.easing.standard });
+    contentMix.value = withTiming(0, {
+      duration: reducedMotion ? 0 : theme.duration.base,
+      easing: theme.easing.standard,
+    });
   };
 
   const containerStyle = useAnimatedStyle(() => ({ opacity: visible.value }));

@@ -8,7 +8,7 @@
  * or velocity threshold, flings it off-screen (`withDecay`) and cycles it to
  * the bottom of the deck — infinite, haptic on every commit.
  */
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { StyleSheet, View, useWindowDimensions } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
@@ -25,6 +25,7 @@ import { MotiView } from 'moti';
 import { Text } from '@/components/Text';
 import { factCards, type FactCard } from '@/content/factCards';
 import { haptics } from '@/lib/haptics';
+import { useReducedMotion } from '@/lib/useReducedMotion';
 import { theme } from '@/theme/theme';
 
 const VISIBLE = 3;
@@ -33,6 +34,7 @@ const SWIPE_VELOCITY_THRESHOLD = 800;
 
 export function CardDeck() {
   const { width: screenWidth } = useWindowDimensions();
+  const reducedMotion = useReducedMotion();
   const [order, setOrder] = useState<string[]>(() => factCards.map((c) => c.id));
 
   const commitTop = () => {
@@ -47,9 +49,9 @@ export function CardDeck() {
   return (
     <MotiView
       style={styles.root}
-      from={{ opacity: 0, translateY: 20 }}
+      from={{ opacity: 0, translateY: reducedMotion ? 0 : 20 }}
       animate={{ opacity: 1, translateY: 0 }}
-      transition={{ type: 'timing', duration: theme.duration.base }}
+      transition={{ type: 'timing', duration: reducedMotion ? 0 : theme.duration.base }}
     >
       <Text variant="overline" color="accent">
         A few extra things
@@ -68,6 +70,7 @@ export function CardDeck() {
               card={card}
               stackIndex={stackIndex}
               screenWidth={screenWidth}
+              reducedMotion={reducedMotion}
               onCommit={stackIndex === 0 ? commitTop : undefined}
             />
           );
@@ -81,15 +84,17 @@ export function CardDeck() {
   );
 }
 
-function DeckCard({
+const DeckCard = React.memo(function DeckCard({
   card,
   stackIndex,
   screenWidth,
+  reducedMotion,
   onCommit,
 }: {
   card: FactCard;
   stackIndex: number;
   screenWidth: number;
+  reducedMotion: boolean;
   onCommit?: () => void;
 }) {
   const isTop = stackIndex === 0;
@@ -97,12 +102,15 @@ function DeckCard({
   const translateY = useSharedValue(0);
   // A springed float (not the raw prop) so promotion up the stack — after the
   // card ahead of it is dismissed — glides to its new resting spot instead of
-  // snapping there.
+  // snapping there. De-bounced (near-critically-damped) when reduced motion
+  // is on, so it still moves but without overshoot.
   const restIndex = useSharedValue(stackIndex);
+  const settleSpring = reducedMotion ? theme.spring.press : theme.spring.gentle;
+  const returnSpring = reducedMotion ? theme.spring.press : theme.spring.snappy;
 
   useEffect(() => {
-    restIndex.value = withSpring(stackIndex, theme.spring.gentle);
-  }, [stackIndex, restIndex]);
+    restIndex.value = withSpring(stackIndex, settleSpring);
+  }, [stackIndex, restIndex, settleSpring]);
 
   const pan = Gesture.Pan()
     .enabled(isTop)
@@ -127,8 +135,8 @@ function DeckCard({
         translateY.value = withDecay({ velocity: e.velocityY, deceleration: 0.997 });
         runOnJS(onCommit)();
       } else {
-        translateX.value = withSpring(0, theme.spring.snappy);
-        translateY.value = withSpring(0, theme.spring.snappy);
+        translateX.value = withSpring(0, returnSpring);
+        translateY.value = withSpring(0, returnSpring);
       }
     });
 
@@ -160,7 +168,7 @@ function DeckCard({
       </Animated.View>
     </GestureDetector>
   );
-}
+});
 
 const STAGE_HEIGHT = 260;
 

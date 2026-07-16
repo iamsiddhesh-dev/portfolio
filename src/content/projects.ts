@@ -3,10 +3,9 @@
  * (reverse-scroll cards, card deck, detail morphs) reads from here, so nothing
  * downstream blocks on copy.
  *
- * ⚠️  Vibely and SpeakWell are still flagged `draft: true` — their copy is real
- *     but the owner is still refining it. The `draft` flag is internal tracking
- *     only and is NOT rendered. Every entry now carries real links, each with an
- *     `icon` key resolved to an image via `content/icons.ts`.
+ * `draft` is internal tracking only and is NOT rendered — all five projects are
+ * `draft: false` as of Phase 7. Every entry carries real links, each with an
+ * `icon` key resolved to an image via `content/icons.ts`.
  */
 import type { IconKey } from './icons';
 
@@ -68,7 +67,7 @@ export const projects: Project[] = [
         icon: "github",
       },
     ],
-    draft: true,
+    draft: false,
   },
   {
     id: "speakwell",
@@ -108,7 +107,7 @@ export const projects: Project[] = [
         icon: "demo",
       },
     ],
-    draft: true,
+    draft: false,
   },
   {
     id: "kodean",

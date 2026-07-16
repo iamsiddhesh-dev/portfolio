@@ -7,6 +7,7 @@ import { StyleSheet, View } from 'react-native';
 import { AnimatePresence, MotiView } from 'moti';
 
 import { Text } from '@/components/Text';
+import { useReducedMotion } from '@/lib/useReducedMotion';
 import { theme } from '@/theme/theme';
 
 type StepShellProps = PropsWithChildren<{
@@ -17,14 +18,20 @@ type StepShellProps = PropsWithChildren<{
 }>;
 
 export function StepShell({ stepKey, eyebrow, title, subtitle, children }: StepShellProps) {
+  const reducedMotion = useReducedMotion();
+
   return (
     <AnimatePresence exitBeforeEnter>
       <MotiView
         key={stepKey}
-        from={{ opacity: 0, translateY: 16 }}
+        from={{ opacity: 0, translateY: reducedMotion ? 0 : 16 }}
         animate={{ opacity: 1, translateY: 0 }}
-        exit={{ opacity: 0, translateY: -12 }}
-        transition={{ type: 'timing', duration: theme.duration.base, easing: theme.easing.emphasized }}
+        exit={{ opacity: 0, translateY: reducedMotion ? 0 : -12 }}
+        transition={{
+          type: 'timing',
+          duration: reducedMotion ? 0 : theme.duration.base,
+          easing: theme.easing.emphasized,
+        }}
         style={styles.wrap}
       >
         <View style={styles.header}>

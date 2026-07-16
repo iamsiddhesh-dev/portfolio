@@ -20,12 +20,15 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { AccentOrb } from '@/components/AccentOrb';
+import { useReducedMotion } from '@/lib/useReducedMotion';
 import { theme } from '@/theme/theme';
 
 const PARTICLE_COUNT = 12;
 const BURST_DISTANCE = 130;
+const REDUCED_MOTION_HOLD_MS = 400;
 
 export function Celebration({ onDone }: { onDone: () => void }) {
+  const reducedMotion = useReducedMotion();
   const orbScale = useSharedValue(0);
   const burst = useSharedValue(0);
 
@@ -46,6 +49,15 @@ export function Celebration({ onDone }: { onDone: () => void }) {
   }, []);
 
   useEffect(() => {
+    if (reducedMotion) {
+      // No particle flourish — the orb just settles, and success is confirmed
+      // by a brief hold before advancing rather than a burst animation.
+      orbScale.value = withTiming(1, { duration: 0 });
+      burst.value = withTiming(1, { duration: REDUCED_MOTION_HOLD_MS }, (finished) => {
+        if (finished) runOnJS(handleDone)();
+      });
+      return;
+    }
     orbScale.value = withSpring(1, theme.spring.bouncy);
     burst.value = withDelay(
       80,
@@ -53,7 +65,7 @@ export function Celebration({ onDone }: { onDone: () => void }) {
         if (finished) runOnJS(handleDone)();
       }),
     );
-  }, [orbScale, burst, handleDone]);
+  }, [reducedMotion, orbScale, burst, handleDone]);
 
   const orbStyle = useAnimatedStyle(() => ({
     transform: [{ scale: orbScale.value }],
@@ -61,9 +73,11 @@ export function Celebration({ onDone }: { onDone: () => void }) {
 
   return (
     <View style={styles.wrap} pointerEvents="none">
-      {Array.from({ length: PARTICLE_COUNT }).map((_, i) => (
-        <Particle key={i} index={i} burst={burst} />
-      ))}
+      {reducedMotion
+        ? null
+        : Array.from({ length: PARTICLE_COUNT }).map((_, i) => (
+            <Particle key={i} index={i} burst={burst} />
+          ))}
       <Animated.View style={orbStyle}>
         <AccentOrb size={140} />
       </Animated.View>

@@ -355,7 +355,51 @@ A recruiter taps the link, installs the APK, and signs up — but instead of a b
   inline `danger`-colored text. tsc / `expo lint` / `expo export` (android)
   all clean; `expo-doctor` 17/18 (the same accepted `expo-modules-core`
   false-positive from Phase 2, not a new regression).
-- [ ] Phase 7 — Polish & Ship
+- [x] **Phase 7 — Polish, Performance & Ship** (2026-07-16): **On `feature/phase-7-polish-ship`,
+  not yet merged.** Static checks clean throughout (tsc / `expo lint` / `expo export` android /
+  `expo-doctor` 17/18, same accepted `expo-modules-core` false-positive since Phase 2); bumped
+  `expo` 54.0.35 → 54.0.36 (patch-level, still SDK 54) per `expo-doctor`'s version-match check.
+  **Reduce-motion accessibility landed** — new `src/lib/useReducedMotion.ts` wraps
+  `AccessibilityInfo`'s reduce-motion setting + change events; gated behind it: onboarding
+  `StepShell` crossfades (duration → 0), `Hero`'s entrance stagger + scroll parallax (skipped
+  entirely), the exit `Celebration` particle burst (skipped — orb still arrives, success still
+  confirmed via a short hold + the existing haptics/copy), `CardDeck`'s settle/return springs
+  (swap `gentle`/`snappy` → `theme.spring.press`, near-critically-damped), and the project
+  detail shared-element morph (`lib/morph.tsx`, all `withTiming` durations → 0). Documented as
+  the standing pattern in `CLAUDE.md`'s Premium Bar section. **Perf audit (code-level only, no
+  device attached this session):** `CardDeck`'s `DeckCard` wrapped in `React.memo` (was
+  re-rendering all 3 visible cards on every `order` change); no stray `console.*` found in any
+  animation hot path. **Error/empty states:** `handleResend` (entry) and `handleSignOut`
+  (portfolio) now actually handle failure instead of swallowing it silently; a bad `/project/:id`
+  route now renders a themed not-found screen with a way back instead of a blank screen; added
+  the app's first React error boundary (`src/components/ErrorBoundary.tsx`, wraps the whole tree
+  in `app/_layout.tsx`) so an unexpected render throw no longer white-screens. **Content debt
+  cleared:** Vibely and SpeakWell flipped to `draft: false` in `projects.ts` — copy itself
+  unchanged (user confirmed the existing copy was fine, it just hadn't been marked ready).
+  **App icon + splash screen:** already fully configured since an earlier phase — audited, no
+  changes needed. **EAS Android preview build:** triggered
+  (`eas build -p android --profile preview`) — the first build succeeded but **crashed
+  immediately on install with no UI at all**. Root cause (confirmed by the user's on-device
+  report, matching a line already visible in the first build's own log): the `preview`
+  environment had zero EAS-hosted environment variables configured, so
+  `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY` was undefined in the built app — `.env.local` is
+  gitignored and never travels to EAS's cloud build servers on its own. `app/_layout.tsx`
+  throws on that missing key at **module load time**, before `RootLayout` renders, so even the
+  new `ErrorBoundary` (a render-time catch) couldn't intercept it — instant crash, no error UI,
+  matches exactly what was reported. Fixed with `eas env:push preview --path .env.local` (and
+  the same for `production`, which was also empty — `development` already had these from Phase
+  6). Rebuilt; the second build's log confirms the vars loaded
+  ("Environment variables ... loaded from the 'preview' environment on EAS: ..."). **Final,
+  working internal-distribution share link:**
+  https://expo.dev/accounts/bhoot-is-here/projects/Portfolio/builds/810fa0c9-b6d4-4dd4-901c-0d39ec3eabec
+  (this is the link for the YoLearn.ai application form — the user still needs to confirm it
+  actually opens and runs on-device before treating this as done). **README rewritten** from the
+  `create-expo-app` placeholder — architecture notes,
+  the reduce-motion pattern, per-animation-pattern GIF placeholders with captions, and a
+  60–90s demo-video shot list, all left as explicit placeholders for the user's own on-device
+  capture (no physical device in this environment). **Not done this session, explicit
+  handoff to the user:** the actual on-device perf/profiler pass on a mid-range Android
+  device, and recording the GIFs/demo video the README points at.
 
 ### Handoff notes (after Phase 1)
 
@@ -935,3 +979,54 @@ celebration plays; sign-off screen appears with working "Tip again" (replay) and
 portfolio". Cancel-without-paying and the `4000 0000 0000 0002` decline card were implemented per
 plan but not explicitly re-itemized after the two fixes below — worth a quick re-check next
 session before assuming they still behave, though neither code path was touched by either fix.
+
+### Handoff notes (after Phase 7)
+
+**On `feature/phase-7-polish-ship`, not yet merged to `main`.** This was a code-and-config
+session with no physical device attached — everything static-checkable is done and clean;
+everything that requires an actual phone in hand (on-device perf pass, GIF/video capture) is an
+explicit handoff below, same pattern as every earlier phase's "it compiles ≠ it works" caveat,
+just inverted: this time it's "it's clean ≠ it's been seen."
+
+**Reduce-motion pattern, for future phases to reuse:** `src/lib/useReducedMotion.ts` wraps
+`AccessibilityInfo.isReduceMotionEnabled()` + the `reduceMotionChanged` subscription. Applied so
+far to `Hero`, `StepShell`, `Celebration`, `CardDeck`, and `lib/morph.tsx` — the biggest/most
+decorative motion, not an exhaustive rewrite of all 21 animated files (this phase's depth is
+"Low — checklist-driven" per the routing table). Any *new* large or decorative motion added in
+future phases should gate behind this hook from the start (documented as a standing rule in
+`CLAUDE.md`'s Premium Bar section now) rather than being retrofitted later.
+
+**Sharing notes — what goes in the YoLearn.ai application form:**
+- **APK / install link:** https://expo.dev/accounts/bhoot-is-here/projects/Portfolio/builds/810fa0c9-b6d4-4dd4-901c-0d39ec3eabec
+  (EAS internal-distribution preview build, Android — open on an Android device or scan the QR
+  EAS prints to install directly, no Play Store needed). **This is the second build** — the
+  first (`da20b448-...`) crashed on install with no environment variables configured on EAS for
+  the `preview` environment; see the Progress entry above for the root cause and fix
+  (`eas env:push`). If a *third* preview build is ever triggered from a machine that hasn't run
+  `eas env:push` again, don't assume env vars are still there without checking
+  `eas env:list --environment preview` first.
+- **Repo / README:** https://github.com/iamsiddhesh-dev/portfolio — the rewritten `README.md`
+  has the architecture writeup, per-pattern GIF slots, and the demo-video shot list.
+- **Demo video:** not yet recorded — see below. Once done, host it (YouTube unlisted, or drop
+  the file directly if the form accepts an upload) and link it from the README's demo section
+  and wherever the application form asks.
+
+**Explicit handoff to the user — needs a physical Android device, can't be done in this
+environment:**
+1. **On-device perf pass.** Install the preview APK above (or run the existing dev-client build
+   from the Phase 6 handoff) on a mid-range Android device and watch for dropped frames through
+   the reel, momentum scroll, card deck, and morph transitions. The code-level audit this
+   session found nothing obviously wrong (all four flagship animation files are already
+   UI-thread-only per the Phase 5/6 architecture; the one non-memoized component, `DeckCard`,
+   is now `React.memo`'d) — but per the running rule in this project, that's necessary, not
+   sufficient. Also worth toggling the OS "remove animations" / "reduce motion" setting on-device
+   to confirm the five gated spots above actually feel different with it on.
+2. **Record the README's GIFs and demo video**, per the shot list already written into
+   `README.md`'s "Animation patterns" and "Demo video" sections — five short GIFs (one per
+   pattern) plus one 60–90s full-arc video. Drop the files in, update the `<!-- GIF: ... -->` /
+   `<!-- VIDEO: ... -->` placeholders to real embeds/links, and host the video somewhere linkable
+   if the application form wants a URL rather than a file.
+3. Once both of the above are done and look right, merge `feature/phase-7-polish-ship` to
+   `main` and this project is ship-ready for the YoLearn.ai application.
+
+**Out of scope, as planned:** new features, iOS distribution, live Stripe — none touched.

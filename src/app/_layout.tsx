@@ -6,15 +6,22 @@ import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
+import * as SystemUI from 'expo-system-ui';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { fontAssets } from '@/theme/fonts';
 import { theme } from '@/theme/theme';
 
 // Hold the native splash until Clash Display + Satoshi are registered, so the
 // first paint is already on-brand (no system-font flash).
 SplashScreen.preventAutoHideAsync();
+
+// Android paints the root window background (visible behind/around the system
+// nav bar in edge-to-edge mode) white by default — without this it shows as a
+// stray light bar under the on-screen buttons, breaking the dark-locked theme.
+SystemUI.setBackgroundColorAsync(theme.colors.bg);
 
 if (!process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY) {
   throw new Error(
@@ -44,18 +51,20 @@ export default function RootLayout() {
   }
 
   return (
-    <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
-      <ClerkLoaded>
-        <StripeProvider publishableKey={stripePublishableKey}>
-          <GestureHandlerRootView style={styles.root}>
-            <SafeAreaProvider>
-              <StatusBar style="light" />
-              <RootNavigator />
-            </SafeAreaProvider>
-          </GestureHandlerRootView>
-        </StripeProvider>
-      </ClerkLoaded>
-    </ClerkProvider>
+    <ErrorBoundary>
+      <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
+        <ClerkLoaded>
+          <StripeProvider publishableKey={stripePublishableKey}>
+            <GestureHandlerRootView style={styles.root}>
+              <SafeAreaProvider>
+                <StatusBar style="light" />
+                <RootNavigator />
+              </SafeAreaProvider>
+            </GestureHandlerRootView>
+          </StripeProvider>
+        </ClerkLoaded>
+      </ClerkProvider>
+    </ErrorBoundary>
   );
 }
 

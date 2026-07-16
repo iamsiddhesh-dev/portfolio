@@ -15,6 +15,7 @@ import Animated, {
 
 import { AccentOrb } from '@/components/AccentOrb';
 import { Text } from '@/components/Text';
+import { useReducedMotion } from '@/lib/useReducedMotion';
 import { theme } from '@/theme/theme';
 import type { VisitorType } from '@/types/clerk';
 
@@ -54,15 +55,23 @@ export function Hero({
   reason?: string;
 }) {
   const copy = visitorType ? COPY[visitorType] : FALLBACK;
+  const reducedMotion = useReducedMotion();
+  // Entrance delays are purely decorative stagger — collapse to 0 when reduced
+  // so content just appears, no motion but no missing content either.
+  const delay = (ms: number) => (reducedMotion ? 0 : ms);
 
   // Parallax: content drifts up at 0.35× and fades over the first ~70% of a
   // viewport, so the hero recedes rather than hard-cutting into the reel.
-  const parallax = useAnimatedStyle(() => ({
-    opacity: interpolate(scrollY.value, [0, viewportHeight * 0.7], [1, 0], 'clamp'),
-    transform: [
-      { translateY: interpolate(scrollY.value, [0, viewportHeight], [0, viewportHeight * 0.35], 'clamp') },
-    ],
-  }));
+  // Skipped entirely when reduced motion is on — the hero stays put.
+  const parallax = useAnimatedStyle(() => {
+    if (reducedMotion) return { opacity: 1, transform: [{ translateY: 0 }] };
+    return {
+      opacity: interpolate(scrollY.value, [0, viewportHeight * 0.7], [1, 0], 'clamp'),
+      transform: [
+        { translateY: interpolate(scrollY.value, [0, viewportHeight], [0, viewportHeight * 0.35], 'clamp') },
+      ],
+    };
+  });
 
   return (
     <Animated.View style={[{ minHeight: viewportHeight * 0.92 }, styles.root, parallax]}>
@@ -70,26 +79,26 @@ export function Hero({
         <AccentOrb size={200} />
       </View>
 
-      <MotiView from={ENTER} animate={SETTLE} transition={{ type: 'timing', duration: theme.duration.slow, delay: 60 }}>
+      <MotiView from={ENTER} animate={SETTLE} transition={{ type: 'timing', duration: theme.duration.slow, delay: delay(60) }}>
         <Text variant="overline" color="accent">
           {copy.greeting}
         </Text>
       </MotiView>
 
-      <MotiView from={ENTER} animate={SETTLE} transition={{ type: 'timing', duration: theme.duration.slow, delay: 160 }}>
+      <MotiView from={ENTER} animate={SETTLE} transition={{ type: 'timing', duration: theme.duration.slow, delay: delay(160) }}>
         <Text variant="display" style={styles.name}>
           Siddhesh
         </Text>
       </MotiView>
 
-      <MotiView from={ENTER} animate={SETTLE} transition={{ type: 'timing', duration: theme.duration.slow, delay: 280 }}>
+      <MotiView from={ENTER} animate={SETTLE} transition={{ type: 'timing', duration: theme.duration.slow, delay: delay(280) }}>
         <Text variant="bodyLg" color="textSecondary" style={styles.lead}>
           {copy.lead}
         </Text>
       </MotiView>
 
       {reason ? (
-        <MotiView from={ENTER} animate={SETTLE} transition={{ type: 'timing', duration: theme.duration.slow, delay: 400 }}>
+        <MotiView from={ENTER} animate={SETTLE} transition={{ type: 'timing', duration: theme.duration.slow, delay: delay(400) }}>
           <Text variant="caption" color="textMuted" style={styles.reason}>
             “{reason}” — noted.
           </Text>
@@ -100,7 +109,7 @@ export function Hero({
         style={styles.cue}
         from={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        transition={{ type: 'timing', duration: theme.duration.slow, delay: 560 }}
+        transition={{ type: 'timing', duration: theme.duration.slow, delay: delay(560) }}
       >
         <Text variant="overline" color="textMuted">
           Scroll

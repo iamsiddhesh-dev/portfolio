@@ -12,6 +12,7 @@ import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-na
 import { MotiView } from 'moti';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { Button } from '@/components/Button';
 import { Screen } from '@/components/Screen';
 import { Text } from '@/components/Text';
 import { ProjectHero } from '@/components/portfolio/ProjectHero';
@@ -29,7 +30,7 @@ export default function ProjectDetailScreen() {
   const { close } = useMorph();
   const insets = useSafeAreaInsets();
 
-  if (!project) return null;
+  if (!project) return <ProjectNotFound onBack={close} />;
 
   return (
     <Screen edges={['bottom']} glow={false} contentStyle={styles.screenContent}>
@@ -90,6 +91,23 @@ export default function ProjectDetailScreen() {
   );
 }
 
+function ProjectNotFound({ onBack }: { onBack: () => void }) {
+  return (
+    <Screen contentStyle={styles.notFound}>
+      <Text variant="overline" color="accent">
+        Not found
+      </Text>
+      <Text variant="h2" style={styles.notFoundTitle}>
+        This one didn’t make it
+      </Text>
+      <Text variant="body" color="textSecondary" style={styles.notFoundBody}>
+        That project link doesn’t match anything here.
+      </Text>
+      <Button label="Back to portfolio" onPress={onBack} style={styles.notFoundButton} />
+    </Screen>
+  );
+}
+
 function BackButton({ top, onPress }: { top: number; onPress: () => void }) {
   const pressed = useSharedValue(0);
   const animatedStyle = useAnimatedStyle(() => ({
@@ -120,6 +138,22 @@ function BackButton({ top, onPress }: { top: number; onPress: () => void }) {
 const styles = StyleSheet.create({
   screenContent: {
     paddingHorizontal: 0,
+  },
+  notFound: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  notFoundTitle: {
+    marginTop: theme.spacing.xs,
+  },
+  notFoundBody: {
+    marginTop: theme.spacing.sm,
+    marginBottom: theme.spacing.xl,
+    textAlign: 'center',
+  },
+  notFoundButton: {
+    minWidth: 200,
   },
   scroll: {
     paddingBottom: theme.spacing.huge,

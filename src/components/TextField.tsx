@@ -55,6 +55,9 @@ export const TextField = forwardRef<TextInput, TextFieldProps>(function TextFiel
         <TextInput
           ref={ref}
           placeholderTextColor={theme.colors.textMuted}
+          cursorColor={theme.colors.accent}
+          selectionColor={theme.colors.accent}
+          selectionHandleColor={theme.colors.accent}
           style={[styles.input, style]}
           onFocus={handleFocus}
           onBlur={handleBlur}

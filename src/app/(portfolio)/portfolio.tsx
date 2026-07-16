@@ -54,7 +54,11 @@ export default function PortfolioScreen() {
 
   const handleSignOut = async () => {
     haptics.medium();
-    await signOut();
+    try {
+      await signOut();
+    } catch {
+      haptics.warning();
+    }
   };
 
   return (

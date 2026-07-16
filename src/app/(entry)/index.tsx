@@ -106,9 +106,12 @@ export default function EntryScreen() {
     }
   };
 
-  const handleResend = () => {
+  const handleResend = async () => {
     setVerifyError(null);
-    signUpHook.signUp.verifications.sendEmailCode();
+    const { error } = await signUpHook.signUp.verifications.sendEmailCode();
+    if (error) {
+      setVerifyError(error.message ?? 'Could not resend the code.');
+    }
   };
 
   return (

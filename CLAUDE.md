@@ -26,6 +26,9 @@ The whole app must read as premium — enforced per-phase, never deferred to "po
 - **Motion:** one shared vocabulary in `src/theme/theme.ts` — `easing`, `duration`
   (250/400/600), `spring`. Never `Easing.ease`; never an un-choreographed move. 60fps
   on-device is mandatory (animate on the UI thread — shared values + `useAnimatedStyle`).
+  Gate new large/decorative motion behind `@/lib/useReducedMotion` (durations → 0,
+  bouncy springs → `theme.spring.press`) — see `Hero`, `StepShell`, `CardDeck`,
+  `Celebration`, `lib/morph.tsx` for the pattern.
 - **Micro-interactions:** pressed states + haptics (`@/lib/haptics`) on every interactive
   element, added in the phase that builds the element.
 
