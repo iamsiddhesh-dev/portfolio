@@ -131,7 +131,7 @@ npx eas-cli login
 npx eas-cli build -p android --profile preview
 ```
 
-**Preview build share link:** https://expo.dev/accounts/bhoot-is-here/projects/Portfolio/builds/810fa0c9-b6d4-4dd4-901c-0d39ec3eabec
+**Preview build share link:** https://expo.dev/accounts/bhoot-is-here/projects/Portfolio/builds/83c0005e-d6ed-4f06-85b4-eeed562780d0
 
 ## Known limitations
 

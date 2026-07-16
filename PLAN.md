@@ -355,8 +355,10 @@ A recruiter taps the link, installs the APK, and signs up — but instead of a b
   inline `danger`-colored text. tsc / `expo lint` / `expo export` (android)
   all clean; `expo-doctor` 17/18 (the same accepted `expo-modules-core`
   false-positive from Phase 2, not a new regression).
-- [x] **Phase 7 — Polish, Performance & Ship** (2026-07-16): **On `feature/phase-7-polish-ship`,
-  not yet merged.** Static checks clean throughout (tsc / `expo lint` / `expo export` android /
+- [x] **Phase 7 — Polish, Performance & Ship** (2026-07-16): **Merged to `main` and pushed**
+  (was `feature/phase-7-polish-ship`, now deleted — all other stale merged feature branches from
+  Phases 2/3/4/6 cleaned up in the same pass, local and GitHub both down to just `main`).
+  Static checks clean throughout (tsc / `expo lint` / `expo export` android /
   `expo-doctor` 17/18, same accepted `expo-modules-core` false-positive since Phase 2); bumped
   `expo` 54.0.35 → 54.0.36 (patch-level, still SDK 54) per `expo-doctor`'s version-match check.
   **Reduce-motion accessibility landed** — new `src/lib/useReducedMotion.ts` wraps
@@ -389,17 +391,28 @@ A recruiter taps the link, installs the APK, and signs up — but instead of a b
   matches exactly what was reported. Fixed with `eas env:push preview --path .env.local` (and
   the same for `production`, which was also empty — `development` already had these from Phase
   6). Rebuilt; the second build's log confirms the vars loaded
-  ("Environment variables ... loaded from the 'preview' environment on EAS: ..."). **Final,
-  working internal-distribution share link:**
-  https://expo.dev/accounts/bhoot-is-here/projects/Portfolio/builds/810fa0c9-b6d4-4dd4-901c-0d39ec3eabec
-  (this is the link for the YoLearn.ai application form — the user still needs to confirm it
-  actually opens and runs on-device before treating this as done). **README rewritten** from the
+  ("Environment variables ... loaded from the 'preview' environment on EAS: ..."), and the app
+  opened correctly on-device. **Two more real fixes landed after that on-device check:** (1) the
+  user regenerated the app icon/adaptive-icon/favicon/monochrome assets (amber gradient + black
+  "P", matching `theme.gradients.ember`) and dropped them into the existing `assets/images/*`
+  paths — no `app.json` changes needed, paths were already correct; (2) two theme-consistency
+  bugs the user caught on-device: the text-input cursor/selection was Android's default blue
+  instead of the amber accent (fixed in `src/components/TextField.tsx` via `cursorColor` /
+  `selectionColor` / `selectionHandleColor` set to `theme.colors.accent`), and the Android system
+  navigation bar background was stray white instead of matching the dark theme (fixed in
+  `src/app/_layout.tsx` — `expo-system-ui` was already a dependency but never actually called;
+  added `SystemUI.setBackgroundColorAsync(theme.colors.bg)` at startup). A third preview build
+  was triggered with all of the above and completed successfully. **Final, working
+  internal-distribution share link:**
+  https://expo.dev/accounts/bhoot-is-here/projects/Portfolio/builds/83c0005e-d6ed-4f06-85b4-eeed562780d0
+  (this is the link for the YoLearn.ai application form). **README rewritten** from the
   `create-expo-app` placeholder — architecture notes,
   the reduce-motion pattern, per-animation-pattern GIF placeholders with captions, and a
   60–90s demo-video shot list, all left as explicit placeholders for the user's own on-device
   capture (no physical device in this environment). **Not done this session, explicit
   handoff to the user:** the actual on-device perf/profiler pass on a mid-range Android
-  device, and recording the GIFs/demo video the README points at.
+  device, confirming the third build (new icon/cursor/nav-bar fixes) looks right on-device, and
+  recording the GIFs/demo video the README points at.
 
 ### Handoff notes (after Phase 1)
 
@@ -982,11 +995,15 @@ session before assuming they still behave, though neither code path was touched 
 
 ### Handoff notes (after Phase 7)
 
-**On `feature/phase-7-polish-ship`, not yet merged to `main`.** This was a code-and-config
-session with no physical device attached — everything static-checkable is done and clean;
-everything that requires an actual phone in hand (on-device perf pass, GIF/video capture) is an
-explicit handoff below, same pattern as every earlier phase's "it compiles ≠ it works" caveat,
-just inverted: this time it's "it's clean ≠ it's been seen."
+**Merged to `main` and pushed** (`feature/phase-7-polish-ship` deleted after the fast-forward
+merge; all other stale, already-merged feature branches from Phases 2/3/4/6 deleted in the same
+pass, locally and on GitHub — the repo is down to just `main` on both sides). Most of this
+session was code-and-config work with no physical device attached — but the user *did* install
+the first preview build on-device partway through, which caught a real bug (see below) that
+static checks alone couldn't have found, so this phase ended up following the "it compiles ≠ it
+works" pattern from every earlier phase after all, just later than usual. Confirming the *third*
+build (new icon + cursor + nav-bar fixes) still looks right, plus the on-device perf pass and
+GIF/video capture, remain explicit handoffs below.
 
 **Reduce-motion pattern, for future phases to reuse:** `src/lib/useReducedMotion.ts` wraps
 `AccessibilityInfo.isReduceMotionEnabled()` + the `reduceMotionChanged` subscription. Applied so
@@ -997,14 +1014,15 @@ future phases should gate behind this hook from the start (documented as a stand
 `CLAUDE.md`'s Premium Bar section now) rather than being retrofitted later.
 
 **Sharing notes — what goes in the YoLearn.ai application form:**
-- **APK / install link:** https://expo.dev/accounts/bhoot-is-here/projects/Portfolio/builds/810fa0c9-b6d4-4dd4-901c-0d39ec3eabec
+- **APK / install link:** https://expo.dev/accounts/bhoot-is-here/projects/Portfolio/builds/83c0005e-d6ed-4f06-85b4-eeed562780d0
   (EAS internal-distribution preview build, Android — open on an Android device or scan the QR
-  EAS prints to install directly, no Play Store needed). **This is the second build** — the
-  first (`da20b448-...`) crashed on install with no environment variables configured on EAS for
-  the `preview` environment; see the Progress entry above for the root cause and fix
-  (`eas env:push`). If a *third* preview build is ever triggered from a machine that hasn't run
-  `eas env:push` again, don't assume env vars are still there without checking
-  `eas env:list --environment preview` first.
+  EAS prints to install directly, no Play Store needed). **This is the third build** — the first
+  (`da20b448-...`) crashed on install with no environment variables configured on EAS for the
+  `preview` environment (fixed via `eas env:push`, see the Progress entry above); the second
+  (`810fa0c9-...`) opened correctly but predates the regenerated app icon and the cursor/nav-bar
+  theme fixes. If a future preview build is ever triggered from a machine that hasn't run
+  `eas env:push` before, don't assume env vars are still there without checking
+  `eas env:list --environment preview` first — they live on EAS's servers, not in git.
 - **Repo / README:** https://github.com/iamsiddhesh-dev/portfolio — the rewritten `README.md`
   has the architecture writeup, per-pattern GIF slots, and the demo-video shot list.
 - **Demo video:** not yet recorded — see below. Once done, host it (YouTube unlisted, or drop
@@ -1026,7 +1044,7 @@ environment:**
    pattern) plus one 60–90s full-arc video. Drop the files in, update the `<!-- GIF: ... -->` /
    `<!-- VIDEO: ... -->` placeholders to real embeds/links, and host the video somewhere linkable
    if the application form wants a URL rather than a file.
-3. Once both of the above are done and look right, merge `feature/phase-7-polish-ship` to
-   `main` and this project is ship-ready for the YoLearn.ai application.
+3. Once both of the above are confirmed, this project is ship-ready for the YoLearn.ai
+   application — the branch merge/cleanup is already done, nothing further to land in git.
 
 **Out of scope, as planned:** new features, iOS distribution, live Stripe — none touched.
