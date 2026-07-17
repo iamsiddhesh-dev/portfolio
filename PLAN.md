@@ -1076,3 +1076,126 @@ import and the `setButtonStyleAsync` call in `src/app/_layout.tsx` (marked `// T
 keeps running on that existing build while a welcome-screen feature (see below) gets tested.
 Re-enable both commented blocks the next time a dev-client or preview build is triggered — the
 package is still in `package.json`, only the JS-side call is dormant.
+
+### Ad-hoc — Web deploy (2026-07-17)
+
+**Not a numbered phase.** Goal: make the app shareable as a plain URL (no app install), on
+`feature/web-deploy` (branched off `main` at the tip of Phase 7 + the 2026-07-17 welcome-screen
+update). **Live at https://portfolio-web-rho-mocha.vercel.app** (Vercel, free tier, CLI-deployed —
+see "Deploy mechanics" below for why it's CLI rather than the GitHub integration for now).
+
+**The one real blocker, as anticipated going in:** `@stripe/stripe-react-native` has **zero** web
+build output at all (no `.web.js` anywhere in the package) — not just a runtime limitation, a
+*bundling* one. Confirmed by trying the originally-planned fix (a sibling `(exit)/exit.web.tsx`
+route file) and watching `expo export -p web` fail: Expo Router's app-directory `require.context`
+enumerates every physical filename it finds **including the extension**, so a `.web.tsx` sibling
+does not stop the plain `.tsx` file from also being required into the web bundle — platform-
+extension resolution only applies to *bare* import specifiers (`import x from './foo'`), not to
+this literal-filename enumeration. **Fix: keep the route file singular** (`(exit)/exit.tsx`, one
+file, works for both platforms) and push the actual platform split down into plain modules
+*outside* `src/app`, which normal `import` resolution handles correctly:
+- `src/components/StripeRoot.tsx` / `.web.tsx` — the `StripeProvider` wrapper, mounted once in
+  `src/app/_layout.tsx`. Web's version does nothing (`<Fragment>{children}</Fragment>`), never
+  imports the Stripe package.
+- `src/lib/tipFlow.ts` / `.web.tsx` — a `useTipFlow()` hook returning `{ startTip }`. Native calls
+  `useStripe()` and drives PaymentSheet exactly as before (untouched). Web calls the new
+  `createTipCheckoutSession` (`src/lib/tips.ts`) and does `window.location.href = url` — no new
+  client dependency needed, since a Checkout Session's `url` field is Stripe's own hosted page,
+  no `@stripe/stripe-js` required. Both return a shared `TipFlowResult` union
+  (`success | cancelled | redirecting | error`) so `(exit)/exit.tsx` branches on one thing instead
+  of duplicating the whole screen.
+- **Server side:** `server/api/create-checkout-session.ts` (new, alongside the existing
+  `create-payment-intent.ts`, same allow-list-of-three-amounts pattern, no auth) —
+  `stripe.checkout.sessions.create` with `success_url`/`cancel_url` built from a `WEB_APP_URL` env
+  var (server-side, not client-supplied, so Checkout always redirects to a known origin rather
+  than trusting whatever the browser sends).
+
+**Two real, non-obvious bugs found only by actually clicking through the live deploy — static
+checks (tsc, lint, `expo export`) were clean throughout, continuing the project's running "it
+compiles ≠ it works" pattern, this time for web instead of native:**
+
+1. **`useLocalSearchParams`'s `status` param was read correctly, but the stage machine never
+   visibly advanced.** Root cause: `(exit)/exit.tsx`'s `stage` state started at `'select'` and an
+   effect flipped it to `'celebrating'` a tick after mount — that's a `select → celebrating`
+   transition through the SAME `<AnimatePresence exitBeforeEnter>` instance (the one genuine
+   persistent-`AnimatePresence`-with-changing-`key` usage in this codebase; every onboarding
+   `StepShell` transition, by contrast, actually swaps in a whole different React component per
+   step, so React hard-unmounts the old `AnimatePresence` instead of ever exercising Moti's
+   wait-for-exit-to-finish machinery). On web that wait never resolves — confirmed via temporary
+   console logging that `stage` state updated to `'celebrating'` exactly on schedule, but the DOM
+   stayed frozen on `'select'` forever. Same underlying fragility as the native "sign-off never
+   appeared" bug from the Phase 6 handoff, just triggered by a different sequence. **Fixed two
+   ways:** (a) initialize `stage` via a **lazy `useState` initializer** reading `params.status`
+   directly, so web's only path to `'celebrating'` is the *initial* render, never a transition;
+   (b) gate `exitBeforeEnter` itself to `Platform.OS !== 'web'` (native keeps the crossfade
+   exactly as before; web renders both stages without waiting for the exit signal — a minor
+   motion regression there, not a correctness one). Both were needed: (a) alone still left the
+   later `celebrating → signoff` transition (driven by `Celebration`'s own internal timer) stuck
+   on the same mechanism.
+2. **`Celebration`'s `onDone` never fired on web at all.** Independent of bug 1 — confirmed via
+   logging that Reanimated's `withTiming(...).(finished => runOnJS(handleDone)())` completion
+   callback silently never calls back in this production/minified web build (no error, it just
+   doesn't happen). **Fixed with a JS-side `setTimeout` fallback** matching the same duration,
+   guarded by a `firedRef` so whichever of the two (the real callback or the timer) fires first
+   wins and the other is a no-op. This is now the belt-and-suspenders pattern for any future
+   animation-completion-driven state change that needs to work on web.
+
+**Deploy mechanics — CLI now, GitHub integration later, by the user's choice.** Vercel's dashboard
+import flow hit a `404` on the first attempt (5-second "build," meaning the build command never
+actually ran) because the Framework Preset/Build Command/Output Directory weren't set — before
+that got sorted out, the user deleted the dashboard-created project and asked to deploy via the
+Vercel CLI instead, then disconnect Git so a GitHub-integrated project can be wired up
+deliberately later. What actually shipped: root `vercel.json`
+(`{ buildCommand: "npx expo export -p web", outputDirectory: "dist", cleanUrls: true }` — the
+`cleanUrls` flag was itself a second real bug found in testing: without it, Vercel's static file
+serving doesn't map extensionless `/exit` to the exported `dist/exit.html`, so a **direct load of
+`/exit` 404'd** — this matters because Stripe's `success_url`/`cancel_url` redirect is exactly a
+direct load, not client-side navigation). Deployed via `vercel link --yes --project portfolio-web`
++ `vercel env add` (three `EXPO_PUBLIC_*` vars, Production + Preview) + `vercel deploy --prod`.
+`vercel link` auto-connects GitHub by default when run inside a git repo — **explicitly
+disconnected afterward** via `vercel git disconnect --yes`, per the user's ask, so they can set up
+the GitHub integration themselves in the dashboard when ready (Settings → Git → Connect, or
+re-import). The `server/` Vercel project also got `WEB_APP_URL` added
+(`https://portfolio-web-rho-mocha.vercel.app`) and a redeploy so the new checkout-session endpoint
+points at the right place.
+
+**Other things verified, not just assumed (per the task's own instruction not to assume):**
+- `expo-navigation-bar`'s non-Android build (`NavigationBar.js`) just `console.warn`s on every
+  call rather than throwing — confirmed by reading the package source directly. Safe as-is.
+- `expo-haptics` calls were already platform-gated in `src/lib/haptics.ts` (`Platform.OS === 'ios'
+  || 'android'`) — no changes needed.
+- Clerk's own `tokenCache` (`@clerk/expo/token-cache`) already resolves to `undefined` on
+  non-native via its own `isNative()` check, falling back to Clerk's default web session storage
+  — no changes needed.
+- `BackHandler.addEventListener` on web (`react-native-web`'s stub) doesn't throw, but does
+  `console.error` on every call — cosmetic noise, not a bug, but fixed anyway: both usages
+  (`(entry)/index.tsx`, `(portfolio)/portfolio.tsx`) now short-circuit with `if (Platform.OS ===
+  'web') return;` before registering.
+- Full sign-up round trip (credentials → visitor type → email-code verify → personalized hero)
+  works on web using Clerk's `+clerk_test@` convention with the fixed `424242` code — no real
+  inbox needed for testing. Portfolio act (reel, momentum scroll, project grid, card deck) all
+  render with no console errors.
+- The welcome screen's swipe-up-to-continue gesture (`react-native-gesture-handler` `Gesture.Pan`)
+  was verified with an actual synthetic mouse-drag (dispatched `pointerdown`/`pointermove`
+  sequence, not just a tap) and correctly triggers the step transition. `CardDeck`'s swipe was
+  exercised the same way with no console errors, though a full visual confirmation of the
+  card-cycling animation wasn't possible this session (the browser tooling's screenshot capability
+  was non-functional throughout — timed out on every attempt regardless of target page).
+
+**Not done / explicit handoff to the user:**
+1. **Merge `feature/web-deploy` when ready** — still an open branch, not merged to `main`.
+2. **Set up the GitHub-integrated Vercel deployment**, since the CLI deploy was explicitly a
+   first-pass validation step. Re-import `iamsiddhesh-dev/portfolio` in the Vercel dashboard,
+   point it at whichever branch should auto-deploy, and carry over the same three
+   `EXPO_PUBLIC_*` env vars + `vercel.json` settings (already committed, so the import should pick
+   `vercel.json` up automatically).
+3. **Visually confirm `CardDeck`'s swipe animation on web** (see above — automation confirmed the
+   gesture fires with no errors, but not the visual result).
+4. **Enter a real Stripe test card** (`4242 4242 4242 4242`) on the live Checkout page to see the
+   actual success redirect end-to-end as a paying user would — this session verified the redirect
+   *to* Stripe and the redirect-*back* handling separately (by directly loading
+   `/exit?status=success`/`?status=cancel`), but never submitted the payment form itself
+   (entering card details isn't something this session does regardless of test/live mode).
+5. Rotate/replace the Clerk test accounts created this session
+   (`web-deploy-test+clerk_test@example.com`, `web-deploy-prod-test+clerk_test@example.com`) in
+   the Clerk dashboard if a clean user list matters before sharing the link.
