@@ -1,8 +1,10 @@
 import { useEffect } from 'react';
+import { Platform } from 'react-native';
 import { ClerkLoaded, ClerkProvider, useAuth } from '@clerk/expo';
 import { tokenCache } from '@clerk/expo/token-cache';
 import { StripeProvider } from '@stripe/stripe-react-native';
 import { useFonts } from 'expo-font';
+import * as NavigationBar from 'expo-navigation-bar';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
@@ -22,6 +24,17 @@ SplashScreen.preventAutoHideAsync();
 // nav bar in edge-to-edge mode) white by default — without this it shows as a
 // stray light bar under the on-screen buttons, breaking the dark-locked theme.
 SystemUI.setBackgroundColorAsync(theme.colors.bg);
+
+// RN's edge-to-edge setup picks the 3-button nav bar's light/dark contrast
+// scrim from the *system* light/dark setting at Activity creation, not our
+// forced `userInterfaceStyle: "dark"` — on a phone set to system light mode
+// this races ahead of app.json's override and leaves a light scrim behind the
+// buttons. Forcing button style to "light" (light icons, implying a dark
+// background) directly flips the same isAppearanceLightNavigationBars flag
+// RN set incorrectly, independent of that race. Android only.
+if (Platform.OS === 'android') {
+  NavigationBar.setButtonStyleAsync('light');
+}
 
 if (!process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY) {
   throw new Error(

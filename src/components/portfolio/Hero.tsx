@@ -1,7 +1,6 @@
 /**
  * ACT II hero — the payoff for the auth act. It greets the visitor *by the type
- * they chose during onboarding* (recruiter / client / browsing) and echoes the
- * reason they typed, so the Clerk metadata visibly earns its place. Entrance is a
+ * they chose during onboarding* (recruiter / client / browsing). Entrance is a
  * Moti stagger; a gentle scroll-linked parallax (driven by the shared `scrollY`)
  * sinks it away as the reel takes over.
  */
@@ -25,12 +24,12 @@ const COPY: Record<VisitorType, Copy> = {
   recruiter: {
     greeting: 'Welcome, recruiter',
     lead:
-      'You asked about React Native. This whole thing is the answer — real auth, real payments, 60fps motion. Not a website.',
+      'Real auth, a real Stripe integration, 60fps motion — this whole app is the skill set, not a slide deck.',
   },
   client: {
     greeting: 'Good to see you',
     lead:
-      'You’ve got something you want built. Here’s how I ship product — design through deploy, end to end.',
+      'You’ve got something you want built. This is what I’ve built so far — from design to deployed, end to end.',
   },
   browsing: {
     greeting: 'Glad you’re curious',
@@ -47,12 +46,10 @@ export function Hero({
   scrollY,
   viewportHeight,
   visitorType,
-  reason,
 }: {
   scrollY: SharedValue<number>;
   viewportHeight: number;
   visitorType?: VisitorType;
-  reason?: string;
 }) {
   const copy = visitorType ? COPY[visitorType] : FALLBACK;
   const reducedMotion = useReducedMotion();
@@ -87,7 +84,7 @@ export function Hero({
 
       <MotiView from={ENTER} animate={SETTLE} transition={{ type: 'timing', duration: theme.duration.slow, delay: delay(160) }}>
         <Text variant="display" style={styles.name}>
-          Siddhesh
+          I’m Siddhesh
         </Text>
       </MotiView>
 
@@ -96,14 +93,6 @@ export function Hero({
           {copy.lead}
         </Text>
       </MotiView>
-
-      {reason ? (
-        <MotiView from={ENTER} animate={SETTLE} transition={{ type: 'timing', duration: theme.duration.slow, delay: delay(400) }}>
-          <Text variant="caption" color="textMuted" style={styles.reason}>
-            “{reason}” — noted.
-          </Text>
-        </MotiView>
-      ) : null}
 
       <MotiView
         style={styles.cue}
@@ -140,9 +129,6 @@ const styles = StyleSheet.create({
   lead: {
     marginTop: theme.spacing.sm,
     maxWidth: 420,
-  },
-  reason: {
-    marginTop: theme.spacing.sm,
   },
   cue: {
     flexDirection: 'row',

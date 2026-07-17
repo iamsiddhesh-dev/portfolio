@@ -184,7 +184,7 @@ function SkillRow({
   return (
     <Animated.View style={[styles.skillRow, style]}>
       <Text variant="h3">{skill.label}</Text>
-      <Text variant="caption" color="textMuted">
+      <Text variant="caption" color="textMuted" style={styles.skillNote}>
         {skill.note}
       </Text>
     </Animated.View>
@@ -413,12 +413,20 @@ const styles = StyleSheet.create({
   },
   skillRow: {
     flexDirection: 'row',
-    alignItems: 'baseline',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
     gap: theme.spacing.md,
     paddingVertical: theme.spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.hairline,
+  },
+  // `note` now carries a joined tool list (e.g. "React · React Native ·
+  // Next.js") instead of a short 2-3 word phrase — flex + right-align lets it
+  // wrap onto a second line within its own column instead of overflowing the
+  // row like the original single-line version did.
+  skillNote: {
+    flex: 1,
+    textAlign: 'right',
   },
   // Stats
   statGrid: {

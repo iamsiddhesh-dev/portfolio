@@ -44,10 +44,10 @@ export function TipCard({ preset, selected, disabled, onPress }: TipCardProps) {
       style={[styles.card, selected && styles.cardSelected, disabled && styles.disabled, animatedStyle]}
     >
       <View style={styles.body}>
-        <Text variant="h2" color={selected ? 'accent' : 'text'}>
+        <Text variant="h2" color={selected ? 'accent' : 'text'} center>
           {preset.label}
         </Text>
-        <Text variant="caption" color="textSecondary">
+        <Text variant="caption" color="textSecondary" center>
           {preset.blurb}
         </Text>
       </View>
@@ -63,6 +63,7 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.hairline,
     backgroundColor: theme.colors.surface,
     paddingVertical: theme.spacing.xl,
+    paddingHorizontal: theme.spacing.sm,
     alignItems: 'center',
   },
   cardSelected: {

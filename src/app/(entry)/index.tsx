@@ -1,66 +1,94 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useSignIn, useSignUp } from '@clerk/expo';
 import { useRouter } from 'expo-router';
-import { StyleSheet } from 'react-native';
+import { BackHandler, StyleSheet } from 'react-native';
 
 import { CredentialsStep, type Mode } from '@/components/onboarding/CredentialsStep';
-import { ReasonStep } from '@/components/onboarding/ReasonStep';
 import { VerifyStep } from '@/components/onboarding/VerifyStep';
-import { VisitorTypeStep } from '@/components/onboarding/VisitorTypeStep';
+import { VISITOR_OPTIONS, VisitorTypeStep } from '@/components/onboarding/VisitorTypeStep';
+import { WelcomeStep } from '@/components/onboarding/WelcomeStep';
 import { Screen } from '@/components/Screen';
 import { haptics } from '@/lib/haptics';
 import type { VisitorType } from '@/types/clerk';
 
-type Step = 'credentials' | 'visitorType' | 'reason' | 'verify';
+type Step = 'welcome' | 'credentials' | 'visitorType' | 'verify' | 'signInVerify';
 
 /**
- * ACT I — Entry. Real Clerk auth doubling as a designed "who are you and why are
- * you here?" moment. Order matters: credentials → visitor type → reason (which
- * attaches unsafeMetadata to the still-pending sign-up and fires the email code)
- * → verify (which completes + finalizes the sign-up in one shot). Verification is
- * last so metadata is attached BEFORE the sign-up completes — deferring finalize
- * past completion fails, because Clerk clears a completed sign-up from the client.
- * Existing users take the sign-in path in Step 1 and land straight in the portfolio.
+ * ACT I — Entry. Opens on a title-card welcome (swipe up to continue — no auth
+ * yet, just an invitation), then real Clerk auth doubling as a designed "who are
+ * you and why are you here?" moment. Order matters from there: credentials →
+ * visitor type (picking a card already says why they're here — its hint text
+ * doubles as the `reason` metadata, no separate free-text step) → verify (which
+ * completes + finalizes the sign-up in one shot). Verification is last so
+ * metadata is attached BEFORE the sign-up completes — deferring finalize past
+ * completion fails, because Clerk clears a completed sign-up from the client.
+ * Existing users take the sign-in path in Step 1 and land straight in the
+ * portfolio.
  */
 export default function EntryScreen() {
   const signUpHook = useSignUp();
   const signInHook = useSignIn();
   const router = useRouter();
 
-  const [step, setStep] = useState<Step>('credentials');
+  const [step, setStep] = useState<Step>('welcome');
   const [mode, setMode] = useState<Mode>('signUp');
   const [email, setEmail] = useState('');
-  const [visitorType, setVisitorType] = useState<VisitorType | null>(null);
   const [busy, setBusy] = useState(false);
-  const [reasonError, setReasonError] = useState<string | null>(null);
   const [verifyError, setVerifyError] = useState<string | null>(null);
 
-  // Step 3: stash the metadata on the pending sign-up, send the code, go verify.
-  const handleReasonSubmit = async (reason: string) => {
-    if (!visitorType) return;
-    setBusy(true);
-    setReasonError(null);
+  // The whole act is one screen with internal state, not a route stack, so
+  // Android's hardware back button has nothing of ours to pop by default —
+  // it falls straight through to exiting the app. Intercept it and step
+  // backward through the act instead; only the very first screen (welcome)
+  // lets the default behavior (exit) through.
+  useEffect(() => {
+    const goBack = (): boolean => {
+      switch (step) {
+        case 'credentials':
+          setStep('welcome');
+          return true;
+        case 'visitorType':
+          setStep('credentials');
+          return true;
+        case 'verify':
+          setStep('visitorType');
+          return true;
+        case 'signInVerify':
+          setStep('credentials');
+          return true;
+        default:
+          return false;
+      }
+    };
+    const subscription = BackHandler.addEventListener('hardwareBackPress', goBack);
+    return () => subscription.remove();
+  }, [step]);
 
-    const { signUp } = signUpHook;
-    const { error: updateError } = await signUp.update({
-      unsafeMetadata: { visitorType, reason },
-    });
-    if (updateError) {
-      setReasonError(updateError.message ?? 'Could not save your details.');
-      setBusy(false);
-      return;
-    }
-
-    const { error: codeError } = await signUp.verifications.sendEmailCode();
-    if (codeError) {
-      setReasonError(codeError.message ?? 'Could not send a verification code.');
-      setBusy(false);
-      return;
-    }
-
-    setBusy(false);
+  // Step 2: picking a visitor-type card is the whole "why are you here" —
+  // transition to verify immediately (a card tap should read as instant, not
+  // wait on a network round-trip), then stash the hint text as the `reason`
+  // metadata and send the code in the background. Any failure surfaces on the
+  // verify screen itself, which already has a "Send a new code" retry.
+  const handleVisitorTypeSelect = (value: VisitorType) => {
     haptics.medium();
+    setVerifyError(null);
     setStep('verify');
+
+    const reason = VISITOR_OPTIONS.find((option) => option.value === value)?.hint ?? '';
+    const { signUp } = signUpHook;
+    void (async () => {
+      const { error: updateError } = await signUp.update({
+        unsafeMetadata: { visitorType: value, reason },
+      });
+      if (updateError) {
+        setVerifyError(updateError.message ?? 'Could not save your details.');
+        return;
+      }
+      const { error: codeError } = await signUp.verifications.sendEmailCode();
+      if (codeError) {
+        setVerifyError(codeError.message ?? 'Could not send a verification code.');
+      }
+    })();
   };
 
   // Final step: verify the code → sign-up completes with metadata attached →
@@ -114,28 +142,80 @@ export default function EntryScreen() {
     }
   };
 
+  // Sign-in's "new device" path: password already checked out, this is just
+  // the Client Trust second factor before finalize() can activate a session.
+  const handleSignInVerify = async (code: string) => {
+    setBusy(true);
+    setVerifyError(null);
+
+    const { signIn } = signInHook;
+    const { error } = await signIn.mfa.verifyEmailCode({ code });
+    if (error) {
+      if (!signInHook.errors.fields.code) {
+        setVerifyError(error.message ?? 'That code didn’t work.');
+      }
+      setBusy(false);
+      return;
+    }
+
+    if (signIn.status !== 'complete') {
+      setVerifyError(`Sign-in not complete (status: ${signIn.status}).`);
+      setBusy(false);
+      return;
+    }
+
+    const { error: finalizeErr } = await signIn.finalize({
+      navigate: ({ session }) => {
+        if (session?.currentTask) return;
+        haptics.success();
+        router.replace('/portfolio');
+      },
+    });
+    if (finalizeErr) {
+      setVerifyError(finalizeErr.message ?? 'Could not complete sign-in.');
+      setBusy(false);
+    }
+  };
+
+  const handleSignInResend = async () => {
+    setVerifyError(null);
+    const { error } = await signInHook.signIn.mfa.sendEmailCode();
+    if (error) {
+      setVerifyError(error.message ?? 'Could not resend the code.');
+    }
+  };
+
   return (
     <Screen contentStyle={styles.content}>
-      {step === 'credentials' ? (
+      {step === 'welcome' ? (
+        <WelcomeStep onContinue={() => setStep('credentials')} />
+      ) : step === 'credentials' ? (
         <CredentialsStep
           mode={mode}
           onModeChange={setMode}
           signUpHook={signUpHook}
           signInHook={signInHook}
+          onBack={() => setStep('welcome')}
           onCredentialsDone={(value) => {
             setEmail(value);
             setStep('visitorType');
           }}
-        />
-      ) : step === 'visitorType' ? (
-        <VisitorTypeStep
-          onSelect={(value) => {
-            setVisitorType(value);
-            setStep('reason');
+          onSignInNeedsVerification={(value) => {
+            setEmail(value);
+            setStep('signInVerify');
           }}
         />
-      ) : step === 'reason' ? (
-        <ReasonStep submitting={busy} error={reasonError} onSubmit={handleReasonSubmit} />
+      ) : step === 'visitorType' ? (
+        <VisitorTypeStep onSelect={handleVisitorTypeSelect} />
+      ) : step === 'signInVerify' ? (
+        <VerifyStep
+          email={email}
+          submitting={busy}
+          error={verifyError}
+          fieldError={signInHook.errors.fields.code?.message}
+          onSubmit={handleSignInVerify}
+          onResend={handleSignInResend}
+        />
       ) : (
         <VerifyStep
           email={email}

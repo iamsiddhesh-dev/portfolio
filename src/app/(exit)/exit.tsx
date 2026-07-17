@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useAuth } from '@clerk/expo';
 import { useRouter } from 'expo-router';
 import { useStripe } from '@stripe/stripe-react-native';
 import { AnimatePresence, MotiView } from 'moti';
@@ -6,6 +7,7 @@ import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
 import { AccentOrb } from '@/components/AccentOrb';
 import { Button } from '@/components/Button';
+import { ConfirmModal } from '@/components/ConfirmModal';
 import { Celebration } from '@/components/exit/Celebration';
 import { SignOff } from '@/components/exit/SignOff';
 import { TipCard } from '@/components/exit/TipCard';
@@ -29,12 +31,14 @@ const STAGE_TRANSITION = {
  */
 export default function ExitScreen() {
   const router = useRouter();
+  const { signOut } = useAuth();
   const { initPaymentSheet, presentPaymentSheet } = useStripe();
 
   const [stage, setStage] = useState<Stage>('select');
   const [selectedId, setSelectedId] = useState(tipPresets[1].id);
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [signOutConfirmVisible, setSignOutConfirmVisible] = useState(false);
 
   const selected = tipPresets.find((p) => p.id === selectedId)!;
 
@@ -72,6 +76,15 @@ export default function ExitScreen() {
     }
   }
 
+  const handleSignOut = async () => {
+    haptics.medium();
+    try {
+      await signOut();
+    } catch {
+      haptics.warning();
+    }
+  };
+
   return (
     <Screen>
       <AnimatePresence exitBeforeEnter>
@@ -86,9 +99,6 @@ export default function ExitScreen() {
           >
             <AccentOrb size={110} />
             <View style={styles.copy}>
-              <Text variant="overline" color="accent" center>
-                Act III · Exit
-              </Text>
               <Text variant="h1" center style={styles.title}>
                 Enjoyed this?
               </Text>
@@ -155,11 +165,24 @@ export default function ExitScreen() {
                 setErrorMessage(null);
                 setStage('select');
               }}
-              onBack={() => router.replace('/portfolio')}
+              onSignOut={() => setSignOutConfirmVisible(true)}
             />
           </MotiView>
         )}
       </AnimatePresence>
+
+      <ConfirmModal
+        visible={signOutConfirmVisible}
+        title="Sign out?"
+        body="You’ll be back at the start page — sign in again any time, no issue."
+        cancelLabel="Stay signed in"
+        confirmLabel="Sign out"
+        onCancel={() => setSignOutConfirmVisible(false)}
+        onConfirm={() => {
+          setSignOutConfirmVisible(false);
+          handleSignOut();
+        }}
+      />
     </Screen>
   );
 }

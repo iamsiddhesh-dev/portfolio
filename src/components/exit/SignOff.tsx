@@ -12,9 +12,21 @@ import { theme } from '@/theme/theme';
 
 const SIGN_OFF_LINKS = [
   { label: 'GitHub', url: 'https://github.com/iamsiddhesh-dev', icon: 'github' as const },
+  {
+    label: 'LinkedIn',
+    url: 'https://www.linkedin.com/in/siddheshkasat/',
+    icon: 'linkedin' as const,
+  },
+  { label: 'Email', url: 'mailto:siddheshkasat.sk@gmail.com', icon: 'mail' as const },
 ];
 
-export function SignOff({ onReplay, onBack }: { onReplay: () => void; onBack: () => void }) {
+export function SignOff({
+  onReplay,
+  onSignOut,
+}: {
+  onReplay: () => void;
+  onSignOut: () => void;
+}) {
   return (
     <View style={styles.wrap}>
       <Text variant="overline" color="accent" center>
@@ -30,7 +42,7 @@ export function SignOff({ onReplay, onBack }: { onReplay: () => void; onBack: ()
       <ProjectLinks links={SIGN_OFF_LINKS} />
       <View style={styles.actions}>
         <Button label="Tip again" variant="secondary" onPress={onReplay} />
-        <Button label="Back to portfolio" variant="ghost" onPress={onBack} />
+        <Button label="Sign out" variant="ghost" onPress={onSignOut} />
       </View>
     </View>
   );

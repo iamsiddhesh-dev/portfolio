@@ -130,7 +130,6 @@ export const projects: Project[] = [
       "Built a full spaced-repetition scheduler from scratch to drive the review queue",
       "Debugged and resolved a production 401 auth incident post-launch",
       "Established strict branching rules — feature branches, mandatory PRs for anything touching auth or secrets",
-      "Wrote READMEs for both the extension and landing page repos, plus a Reddit post for early community feedback",
     ],
     links: [
       {

@@ -1,10 +1,11 @@
-import { useState } from 'react';
-import { useAuth, useUser } from '@clerk/expo';
-import { useRouter } from 'expo-router';
-import { StyleSheet, View, useWindowDimensions, type LayoutChangeEvent } from 'react-native';
+import { useCallback, useState } from 'react';
+import { useUser } from '@clerk/expo';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { BackHandler, StyleSheet, View, useWindowDimensions, type LayoutChangeEvent } from 'react-native';
 import Animated, { useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated';
 
 import { Button } from '@/components/Button';
+import { ConfirmModal } from '@/components/ConfirmModal';
 import { Screen } from '@/components/Screen';
 import { Text } from '@/components/Text';
 import { CardDeck } from '@/components/portfolio/CardDeck';
@@ -12,7 +13,6 @@ import { Hero } from '@/components/portfolio/Hero';
 import { MomentumScrollSection } from '@/components/portfolio/MomentumScrollSection';
 import { ProjectGrid } from '@/components/portfolio/ProjectGrid';
 import { PIN_MULTIPLIER, ReverseScrollReel } from '@/components/portfolio/ReverseScrollSection';
-import { haptics } from '@/lib/haptics';
 import { theme } from '@/theme/theme';
 
 /**
@@ -26,12 +26,27 @@ import { theme } from '@/theme/theme';
  */
 export default function PortfolioScreen() {
   const router = useRouter();
-  const { signOut } = useAuth();
   const { user } = useUser();
   const { height: windowHeight } = useWindowDimensions();
 
   const visitorType = user?.unsafeMetadata.visitorType;
-  const reason = user?.unsafeMetadata.reason;
+
+  // This is the root of the signed-in stack — there's no previous screen to
+  // pop to, so the hardware back button has nothing of ours to do here and
+  // was falling through to a crash. Show a themed confirm instead. Scoped to
+  // *focus*, not mount: react-native-screens keeps this screen alive under
+  // project/[id], and an effect-based listener would still be registered
+  // there, hijacking that screen's own "close the project card" back press.
+  const [confirmExitVisible, setConfirmExitVisible] = useState(false);
+  useFocusEffect(
+    useCallback(() => {
+      const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+        setConfirmExitVisible(true);
+        return true;
+      });
+      return () => subscription.remove();
+    }, []),
+  );
 
   const scrollY = useSharedValue(0);
   const reelTop = useSharedValue(0);
@@ -52,15 +67,6 @@ export default function PortfolioScreen() {
     reelTop.value = e.nativeEvent.layout.y;
   };
 
-  const handleSignOut = async () => {
-    haptics.medium();
-    try {
-      await signOut();
-    } catch {
-      haptics.warning();
-    }
-  };
-
   return (
     <Screen contentStyle={styles.screen}>
       <View style={styles.stage}>
@@ -72,12 +78,7 @@ export default function PortfolioScreen() {
           contentContainerStyle={styles.content}
         >
           <View style={styles.padded}>
-            <Hero
-              scrollY={scrollY}
-              viewportHeight={viewportHeight}
-              visitorType={visitorType}
-              reason={reason}
-            />
+            <Hero scrollY={scrollY} viewportHeight={viewportHeight} visitorType={visitorType} />
           </View>
 
           {/* Empty runway for the pinned reel. The fixed overlay draws the cards. */}
@@ -105,13 +106,25 @@ export default function PortfolioScreen() {
             </Text>
             <View style={styles.actions}>
               <Button label="To the exit" trailing="→" onPress={() => router.push('/exit')} />
-              <Button label="Sign out" variant="secondary" onPress={handleSignOut} />
             </View>
           </View>
         </Animated.ScrollView>
 
         <ReverseScrollReel scrollY={scrollY} reelTop={reelTop} viewportHeight={viewportHeight} />
       </View>
+
+      <ConfirmModal
+        visible={confirmExitVisible}
+        title="Leaving already?"
+        body="This closes the app completely. You’re still signed in — next time you’ll land right back here."
+        cancelLabel="Stay"
+        confirmLabel="Exit app"
+        onCancel={() => setConfirmExitVisible(false)}
+        onConfirm={() => {
+          setConfirmExitVisible(false);
+          BackHandler.exitApp();
+        }}
+      />
     </Screen>
   );
 }

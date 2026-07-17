@@ -34,7 +34,7 @@ export function VerifyStep({
   return (
     <StepShell
       stepKey="verify"
-      eyebrow="Last step"
+      center
       title="Confirm it's you"
       subtitle={`Enter the code we just sent to ${email}.`}
     >

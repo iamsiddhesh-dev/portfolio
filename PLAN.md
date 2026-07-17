@@ -1048,3 +1048,31 @@ environment:**
    application — the branch merge/cleanup is already done, nothing further to land in git.
 
 **Out of scope, as planned:** new features, iOS distribution, live Stripe — none touched.
+
+### On-device debugging: nav bar fix didn't actually land (same day, 2026-07-16)
+
+Confirmed on the third build (`83c0005e-...`): the system navigation bar was still a stray light
+bar, despite the `SystemUI.setBackgroundColorAsync` fix from the Phase 7 session. Root-caused by
+reading React Native's own edge-to-edge source
+(`ReactAndroid/.../views/view/WindowUtil.kt`): `expo-system-ui`'s call only paints the Activity's
+`decorView` background (confirmed by reading its native module directly) — it never touches the
+navigation bar itself. Separately, RN's `enableEdgeToEdge()` decides the 3-button nav bar's
+light/dark contrast scrim from `UiModeUtils.isDarkMode(context)`, which reads the **system**
+`Configuration.uiMode` at Activity creation — not our forced `userInterfaceStyle: "dark"` — so on
+a phone whose OS-level theme is set to light, RN raced ahead of app.json's override and left the
+light scrim in place. Fixed by installing `expo-navigation-bar` and calling
+`NavigationBar.setButtonStyleAsync('light')` in `src/app/_layout.tsx` (Android-only, guarded by
+`Platform.OS`) — this directly flips the same `isAppearanceLightNavigationBars` flag RN set
+incorrectly, independent of the system-theme race. Applies to every screen from one root-level
+call, same pattern as the existing `SystemUI` call. **Not yet re-verified on-device** — needs a
+fourth preview build (or a Metro reload if testing via a dev client / Expo Go) to confirm on a
+phone with the OS set to light mode, which is what exposed the bug.
+
+**Update (2026-07-17):** hit the exact same class of bug the Clerk incident above already
+documents — `expo-navigation-bar` calls `requireNativeModule('ExpoNavigationBar')` at import
+time, which throws on any dev-client/preview build compiled before this dependency was added
+(the 2026-07-16 dev-client APK, `107430af-...`, predates it). **Temporarily commented out** the
+import and the `setButtonStyleAsync` call in `src/app/_layout.tsx` (marked `// TEMP:`) so the app
+keeps running on that existing build while a welcome-screen feature (see below) gets tested.
+Re-enable both commented blocks the next time a dev-client or preview build is triggered — the
+package is still in `package.json`, only the JS-side call is dormant.

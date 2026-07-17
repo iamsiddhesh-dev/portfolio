@@ -112,11 +112,13 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.surfaceRaised,
     borderWidth: 1,
     borderColor: theme.colors.hairlineStrong,
+    borderRadius: theme.radius.pill,
   },
   ghost: {
     backgroundColor: 'transparent',
     borderWidth: 1,
-    borderColor: theme.colors.hairline,
+    borderColor: theme.colors.hairlineStrong,
+    borderRadius: theme.radius.pill,
   },
   row: {
     flexDirection: 'row',

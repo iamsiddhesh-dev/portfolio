@@ -10,9 +10,11 @@
  */
 import type { ImageSourcePropType } from 'react-native';
 
-export type IconKey = 'github' | 'demo';
+export type IconKey = 'github' | 'demo' | 'linkedin' | 'mail';
 
 export const iconSources: Record<IconKey, ImageSourcePropType> = {
   github: require('../../assets/icons/github.svg'),
   demo: require('../../assets/icons/browser.svg'),
+  linkedin: require('../../assets/icons/linkedin.svg'),
+  mail: require('../../assets/icons/mail.svg'),
 };

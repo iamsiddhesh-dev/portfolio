@@ -7,22 +7,25 @@ import { haptics } from '@/lib/haptics';
 import { theme } from '@/theme/theme';
 import type { VisitorType } from '@/types/clerk';
 
-const OPTIONS: { value: VisitorType; label: string; hint: string }[] = [
-  { value: 'recruiter', label: 'Recruiter', hint: "I'm hiring or screening candidates" },
-  { value: 'client', label: 'Potential client', hint: 'I have work I want built' },
-  { value: 'browsing', label: 'Just browsing', hint: 'Curious to see what this is' },
+/** Also doubles as the free-text "reason" metadata Clerk stores — picking a
+ * card already says why the visitor is here, so there's no separate step
+ * asking them to type it again. */
+export const VISITOR_OPTIONS: { value: VisitorType; label: string; hint: string }[] = [
+  { value: 'recruiter', label: 'Recruiter', hint: "You're hiring or screening candidates" },
+  { value: 'client', label: 'Potential client', hint: "You've got work you want built" },
+  { value: 'browsing', label: 'Just browsing', hint: 'No agenda, just curious to look around' },
 ];
 
 export function VisitorTypeStep({ onSelect }: { onSelect: (value: VisitorType) => void }) {
   return (
     <StepShell
       stepKey="visitor-type"
-      eyebrow="Step 2 of 3"
+      center
       title="Who are you?"
-      subtitle="This shapes what you see next."
+      subtitle="Tell me why you’re here — I’ll tailor the tour."
     >
-      <View style={styles.list}>
-        {OPTIONS.map((option, i) => (
+      <View>
+        {VISITOR_OPTIONS.map((option, i) => (
           <VisitorCard key={option.value} index={i} option={option} onSelect={onSelect} />
         ))}
       </View>
@@ -36,7 +39,7 @@ function VisitorCard({
   onSelect,
 }: {
   index: number;
-  option: (typeof OPTIONS)[number];
+  option: (typeof VISITOR_OPTIONS)[number];
   onSelect: (value: VisitorType) => void;
 }) {
   const pressed = useSharedValue(0);
@@ -76,9 +79,6 @@ function VisitorCard({
 }
 
 const styles = StyleSheet.create({
-  list: {
-    flex: 1,
-  },
   card: {
     borderWidth: 1,
     borderRadius: theme.radius.lg,

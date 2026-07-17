@@ -31,12 +31,18 @@ export function CredentialsStep({
   signUpHook,
   signInHook,
   onCredentialsDone,
+  onSignInNeedsVerification,
+  onBack,
 }: {
   mode: Mode;
   onModeChange: (mode: Mode) => void;
   signUpHook: SignUpHook;
   signInHook: SignInHook;
   onCredentialsDone: (email: string) => void;
+  /** Sign-in from an unrecognized device needs a second-factor email code
+   * (Clerk "Client Trust") before it can complete — hand off to the verify step. */
+  onSignInNeedsVerification: (email: string) => void;
+  onBack: () => void;
 }) {
   const { signUp, errors: signUpErrors, fetchStatus: signUpFetchStatus } = signUpHook;
   const { signIn, errors: signInErrors, fetchStatus: signInFetchStatus } = signInHook;
@@ -69,6 +75,17 @@ export function CredentialsStep({
             router.replace('/portfolio');
           },
         });
+      } else if (signIn.status === 'needs_client_trust') {
+        // Signing in from a device Clerk hasn't seen before for this account —
+        // it requires a second-factor email code before it'll finalize. Send
+        // the code and hand off to the same VerifyStep the sign-up flow uses.
+        const { error: mfaError } = await signIn.mfa.sendEmailCode();
+        if (mfaError) {
+          setGlobalError(mfaError.message ?? 'Could not send a verification code.');
+          return;
+        }
+        haptics.medium();
+        onSignInNeedsVerification(email.trim());
       } else {
         setGlobalError('This account needs an extra verification step this flow doesn’t support yet.');
       }
@@ -78,11 +95,12 @@ export function CredentialsStep({
   return (
     <StepShell
       stepKey="credentials"
-      eyebrow="Step 1 of 3"
+      center
+      onSwipeBack={onBack}
       title={mode === 'signUp' ? 'Create your account' : 'Welcome back'}
       subtitle={
         mode === 'signUp'
-          ? 'Real auth — this is who greets you inside.'
+          ? 'Real, working auth — built to prove I can, not to gatekeep you.'
           : 'Sign in to pick up where you left off.'
       }
     >
@@ -120,6 +138,8 @@ export function CredentialsStep({
           variant="ghost"
           onPress={() => {
             setGlobalError(null);
+            setEmail('');
+            setPassword('');
             onModeChange(mode === 'signUp' ? 'signIn' : 'signUp');
           }}
         />
