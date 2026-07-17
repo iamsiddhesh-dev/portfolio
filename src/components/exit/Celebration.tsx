@@ -44,11 +44,19 @@ export function Celebration({ onDone }: { onDone: () => void }) {
   // native side gets something that isn't a plain JS host function and
   // aborts on `assertion "isHostFunction(runtime)" failed`). Defining it
   // here, outside any worklet, is what keeps it a normal function.
+  // Guards against firing twice — the JS-timer fallback below and
+  // withTiming's own completion callback can both land.
+  const firedRef = useRef(false);
   const handleDone = useCallback(() => {
+    if (firedRef.current) return;
+    firedRef.current = true;
     onDoneRef.current();
   }, []);
 
   useEffect(() => {
+    firedRef.current = false;
+    const durationMs = reducedMotion ? REDUCED_MOTION_HOLD_MS : 80 + 750;
+
     if (reducedMotion) {
       // No particle flourish — the orb just settles, and success is confirmed
       // by a brief hold before advancing rather than a burst animation.
@@ -56,15 +64,26 @@ export function Celebration({ onDone }: { onDone: () => void }) {
       burst.value = withTiming(1, { duration: REDUCED_MOTION_HOLD_MS }, (finished) => {
         if (finished) runOnJS(handleDone)();
       });
-      return;
+    } else {
+      orbScale.value = withSpring(1, theme.spring.bouncy);
+      burst.value = withDelay(
+        80,
+        withTiming(1, { duration: 750, easing: Easing.out(Easing.cubic) }, (finished) => {
+          if (finished) runOnJS(handleDone)();
+        }),
+      );
     }
-    orbScale.value = withSpring(1, theme.spring.bouncy);
-    burst.value = withDelay(
-      80,
-      withTiming(1, { duration: 750, easing: Easing.out(Easing.cubic) }, (finished) => {
-        if (finished) runOnJS(handleDone)();
-      }),
-    );
+
+    // JS-side fallback: on web, react-native-reanimated's completion callback
+    // (the runOnJS calls above) has been observed to never fire in a
+    // production/minified build — confirmed via on-device logging, no error,
+    // it just silently doesn't call back, permanently stranding the exit
+    // screen on this stage. A plain timer matching the same duration
+    // guarantees the advance happens regardless of that platform quirk;
+    // `handleDone`'s guard means whichever fires first wins and the other
+    // is a no-op.
+    const timer = setTimeout(handleDone, durationMs + 50);
+    return () => clearTimeout(timer);
   }, [reducedMotion, orbScale, burst, handleDone]);
 
   const orbStyle = useAnimatedStyle(() => ({
