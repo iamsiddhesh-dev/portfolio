@@ -1,7 +1,14 @@
 import { useCallback, useState } from 'react';
 import { useUser } from '@clerk/expo';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { BackHandler, StyleSheet, View, useWindowDimensions, type LayoutChangeEvent } from 'react-native';
+import {
+  BackHandler,
+  Platform,
+  StyleSheet,
+  View,
+  useWindowDimensions,
+  type LayoutChangeEvent,
+} from 'react-native';
 import Animated, { useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated';
 
 import { Button } from '@/components/Button';
@@ -40,6 +47,10 @@ export default function PortfolioScreen() {
   const [confirmExitVisible, setConfirmExitVisible] = useState(false);
   useFocusEffect(
     useCallback(() => {
+      // No hardware back button on web — react-native-web's BackHandler stub
+      // logs a console.error on addEventListener, so skip registering entirely.
+      if (Platform.OS === 'web') return;
+
       const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
         setConfirmExitVisible(true);
         return true;

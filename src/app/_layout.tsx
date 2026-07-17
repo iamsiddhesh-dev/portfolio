@@ -2,7 +2,6 @@ import { useEffect } from 'react';
 import { Platform } from 'react-native';
 import { ClerkLoaded, ClerkProvider, useAuth } from '@clerk/expo';
 import { tokenCache } from '@clerk/expo/token-cache';
-import { StripeProvider } from '@stripe/stripe-react-native';
 import { useFonts } from 'expo-font';
 import * as NavigationBar from 'expo-navigation-bar';
 import { Stack } from 'expo-router';
@@ -13,6 +12,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { StripeRoot } from '@/components/StripeRoot';
 import { fontAssets } from '@/theme/fonts';
 import { theme } from '@/theme/theme';
 
@@ -43,13 +43,6 @@ if (!process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY) {
 }
 const publishableKey: string = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
 
-if (!process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY) {
-  throw new Error(
-    'Missing EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY — copy .env.example to .env.local and fill in your Stripe test publishable key.',
-  );
-}
-const stripePublishableKey: string = process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY;
-
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts(fontAssets);
 
@@ -67,14 +60,14 @@ export default function RootLayout() {
     <ErrorBoundary>
       <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
         <ClerkLoaded>
-          <StripeProvider publishableKey={stripePublishableKey}>
+          <StripeRoot>
             <GestureHandlerRootView style={styles.root}>
               <SafeAreaProvider>
                 <StatusBar style="light" />
                 <RootNavigator />
               </SafeAreaProvider>
             </GestureHandlerRootView>
-          </StripeProvider>
+          </StripeRoot>
         </ClerkLoaded>
       </ClerkProvider>
     </ErrorBoundary>

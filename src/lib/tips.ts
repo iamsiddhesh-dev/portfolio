@@ -27,6 +27,19 @@ const apiBaseUrl: string = process.env.EXPO_PUBLIC_API_BASE_URL;
 
 export class TipIntentError extends Error {}
 
+/**
+ * Shared result shape for useTipFlow (tipFlow.ts / tipFlow.web.ts) — one
+ * interface over two genuinely different flows: native resolves in-process
+ * (PaymentSheet returns success/cancel/error directly), web navigates away
+ * to Stripe Checkout and never resolves this call ('redirecting' is the last
+ * state the caller sees before the page unloads).
+ */
+export type TipFlowResult =
+  | { status: 'success' }
+  | { status: 'cancelled' }
+  | { status: 'redirecting' }
+  | { status: 'error'; message: string };
+
 export async function createTipPaymentIntent(amountCents: number): Promise<string> {
   const response = await fetch(`${apiBaseUrl}/api/create-payment-intent`, {
     method: 'POST',
@@ -41,4 +54,26 @@ export async function createTipPaymentIntent(amountCents: number): Promise<strin
   }
 
   return json.clientSecret as string;
+}
+
+/**
+ * Web-only counterpart to createTipPaymentIntent — @stripe/stripe-react-native
+ * (PaymentSheet) has no web build, so the web exit screen redirects the
+ * browser to a Stripe-hosted Checkout Session instead. Returns the Checkout
+ * URL to redirect to.
+ */
+export async function createTipCheckoutSession(amountCents: number): Promise<string> {
+  const response = await fetch(`${apiBaseUrl}/api/create-checkout-session`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ amount: amountCents }),
+  });
+
+  const json = await response.json();
+
+  if (!response.ok) {
+    throw new TipIntentError(json?.error ?? 'Could not start the tip — please try again.');
+  }
+
+  return json.url as string;
 }

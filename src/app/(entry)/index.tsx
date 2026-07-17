@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useSignIn, useSignUp } from '@clerk/expo';
 import { useRouter } from 'expo-router';
-import { BackHandler, StyleSheet } from 'react-native';
+import { BackHandler, Platform, StyleSheet } from 'react-native';
 
 import { CredentialsStep, type Mode } from '@/components/onboarding/CredentialsStep';
 import { VerifyStep } from '@/components/onboarding/VerifyStep';
@@ -42,6 +42,10 @@ export default function EntryScreen() {
   // backward through the act instead; only the very first screen (welcome)
   // lets the default behavior (exit) through.
   useEffect(() => {
+    // No hardware back button on web — react-native-web's BackHandler stub
+    // logs a console.error on addEventListener, so skip registering entirely.
+    if (Platform.OS === 'web') return;
+
     const goBack = (): boolean => {
       switch (step) {
         case 'credentials':

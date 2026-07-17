@@ -1,9 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAuth } from '@clerk/expo';
-import { useRouter } from 'expo-router';
-import { useStripe } from '@stripe/stripe-react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { AnimatePresence, MotiView } from 'moti';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Platform, StyleSheet, View } from 'react-native';
 
 import { AccentOrb } from '@/components/AccentOrb';
 import { Button } from '@/components/Button';
@@ -14,7 +13,8 @@ import { TipCard } from '@/components/exit/TipCard';
 import { Screen } from '@/components/Screen';
 import { Text } from '@/components/Text';
 import { haptics } from '@/lib/haptics';
-import { createTipPaymentIntent, TipIntentError, tipPresets } from '@/lib/tips';
+import { useTipFlow } from '@/lib/tipFlow';
+import { tipPresets } from '@/lib/tips';
 import { theme } from '@/theme/theme';
 
 type Stage = 'select' | 'celebrating' | 'signoff';
@@ -26,13 +26,20 @@ const STAGE_TRANSITION = {
 };
 
 /**
- * ACT III — Exit. Preset tip → Stripe PaymentSheet (test mode) → celebration →
- * sign-off. Test card 4242 4242 4242 4242 succeeds; 4000 0000 0000 0002 declines.
+ * ACT III — Exit. Preset tip → Stripe → celebration → sign-off. On native
+ * this is PaymentSheet (test card 4242 4242 4242 4242 succeeds; 4000 0000
+ * 0000 0002 declines) via useTipFlow (lib/tipFlow.ts). On web,
+ * @stripe/stripe-react-native has no build at all, so useTipFlow
+ * (lib/tipFlow.web.ts) redirects the browser to a Stripe Checkout Session
+ * instead — the browser leaves the app entirely and Stripe redirects back to
+ * this same route with a `status=success|cancel` query param, read below to
+ * resume the stage machine after the fresh page load.
  */
 export default function ExitScreen() {
   const router = useRouter();
   const { signOut } = useAuth();
-  const { initPaymentSheet, presentPaymentSheet } = useStripe();
+  const { startTip } = useTipFlow();
+  const params = useLocalSearchParams<{ status?: string }>();
 
   const [stage, setStage] = useState<Stage>('select');
   const [selectedId, setSelectedId] = useState(tipPresets[1].id);
@@ -42,37 +49,41 @@ export default function ExitScreen() {
 
   const selected = tipPresets.find((p) => p.id === selectedId)!;
 
+  useEffect(() => {
+    // Only ever populated on web, coming back from a Checkout redirect.
+    if (params.status === 'success') {
+      haptics.success();
+      setStage('celebrating');
+    } else if (params.status === 'cancel') {
+      setErrorMessage('Checkout cancelled — no charge was made.');
+    }
+    // Only meant to run once, off the redirect Checkout lands back with.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   async function handleTip() {
     setLoading(true);
     setErrorMessage(null);
 
-    try {
-      const clientSecret = await createTipPaymentIntent(selected.amountCents);
+    const result = await startTip(selected.amountCents);
 
-      const { error: initError } = await initPaymentSheet({
-        merchantDisplayName: 'Siddhesh Kasat',
-        paymentIntentClientSecret: clientSecret,
-      });
-      if (initError) throw new TipIntentError(initError.message);
-
-      const { error: presentError } = await presentPaymentSheet();
-      if (presentError) {
-        if (presentError.code === 'Canceled') {
-          setLoading(false);
-          return;
-        }
-        throw new TipIntentError(presentError.message);
-      }
-
-      haptics.success();
-      setLoading(false);
-      setStage('celebrating');
-    } catch (err) {
-      haptics.warning();
-      setLoading(false);
-      setErrorMessage(
-        err instanceof Error ? err.message : 'Something went wrong — please try again.',
-      );
+    switch (result.status) {
+      case 'success':
+        haptics.success();
+        setLoading(false);
+        setStage('celebrating');
+        break;
+      case 'cancelled':
+        setLoading(false);
+        break;
+      case 'redirecting':
+        // Browser is navigating away to Stripe Checkout — stay loading.
+        break;
+      case 'error':
+        haptics.warning();
+        setLoading(false);
+        setErrorMessage(result.message);
+        break;
     }
   }
 
@@ -127,7 +138,7 @@ export default function ExitScreen() {
 
             <View style={styles.actions}>
               <Button
-                label={loading ? 'Starting…' : `Tip ${selected.label}`}
+                label={loading ? (Platform.OS === 'web' ? 'Redirecting…' : 'Starting…') : `Tip ${selected.label}`}
                 trailing={loading ? undefined : '☕'}
                 onPress={handleTip}
                 disabled={loading}
